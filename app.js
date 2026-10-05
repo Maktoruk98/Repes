@@ -22,10 +22,19 @@ function beep(f,d){try{ac=ac||new (window.AudioContext||window.webkitAudioContex
 async function wake(){try{if('wakeLock' in navigator&&(!wl||wl.released))wl=await navigator.wakeLock.request('screen');}catch(e){}}
 function toast(m,ms){const t=$('#toast');if(!t)return;t.textContent=m;t.classList.add('on');clearTimeout(toastId);toastId=setTimeout(()=>t.classList.remove('on'),ms||2200);}
 
+/* ---------- Sonidos de la interfaz ---------- */
+// Cada sonido es una lista de tonos: [frecuencia inicial, final, retraso, duración, volumen, forma de onda]
+const FX={tap:[[1500,2300,0,0.05,0.09]],sel:[[1100,700,0,0.07,0.09,'triangle'],[2200,1400,0,0.05,0.03]],nav:[[520,1560,0,0.12,0.08],[780,2340,0.045,0.11,0.05]],baja:[[900,280,0,0.14,0.09,'triangle']],rep:[[880,1320,0,0.07,0.14],[1760,2640,0,0.05,0.04]],meta:[[880,880,0,0.09,0.13],[1320,1320,0.08,0.09,0.13],[1760,1760,0.16,0.2,0.14]],ok:[[660,660,0,0.09,0.12],[990,990,0.09,0.16,0.12]]};
+let fxBus=null;
+function audio(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();return ac;}
+function bus(){if(fxBus)return fxBus;const a=audio();fxBus=a.createGain();fxBus.connect(a.destination);const d=a.createDelay(0.5),fb=a.createGain(),w=a.createGain();d.delayTime.value=0.085;fb.gain.value=0.28;w.gain.value=0.3;fxBus.connect(d);d.connect(fb);fb.connect(d);d.connect(w);w.connect(a.destination);return fxBus;}
+function fx(n){try{bus();(FX[n]||[]).forEach(p=>{const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+p[2];o.type=p[5]||'sine';o.frequency.setValueAtTime(p[0],t);o.frequency.exponentialRampToValueAtTime(p[1],t+p[3]);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(p[4],t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+p[3]);o.connect(g);g.connect(fxBus);o.start(t);o.stop(t+p[3]+0.02);});}catch(e){}}
+function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar')return;fx(b.closest('nav')||a==='ver'||a==='volver'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
+
 /* ---------- Contador ---------- */
 let tempoId=0,sen=null;
 function upd(){const c=$('#cnt');if(c)c.textContent=st.reps;const b=$('#big');if(b)b.classList.toggle('done',st.reps>=st.obj);}
-function addRep(){st.reps++;upd();beep(st.reps===st.obj?1175:880,st.reps===st.obj?0.25:0.07);wake();}
+function addRep(){st.reps++;upd();fx(st.reps===st.obj?'meta':'rep');wake();}
 function onMotion(e){const a=e.accelerationIncludingGravity;if(!a||a.x==null||!sen)return;const m=Math.hypot(a.x,a.y,a.z);sen.base+=(m-sen.base)*0.02;sen.f+=((m-sen.base)-sen.f)*0.2;const now=Date.now();if(sen.fase===0&&sen.f>st.sens)sen.fase=1;else if(sen.fase===1&&sen.f<-st.sens){sen.fase=0;if(now-sen.last>700){sen.last=now;addRep();}}}
 async function sensorOn(){if(typeof DeviceMotionEvent==='undefined'){toast('Este dispositivo no ofrece sensor de movimiento');return false;}try{if(typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted'){toast('Permiso de movimiento denegado');return false;}}}catch(e){toast('No se pudo activar el sensor');return false;}sen={base:9.8,f:0,fase:0,last:0};window.addEventListener('devicemotion',onMotion);return true;}
 async function arrancar(){wake();beep(660,0.05);if(st.modo==='tempo'){st.run=true;tempoId=setInterval(()=>{addRep();if(st.reps>=st.obj)parar();},st.tempo*1000);}else if(st.modo==='sensor'){if(!(await sensorOn()))return;st.run=true;}render();}
@@ -36,7 +45,7 @@ setInterval(()=>{if(!st.restEnd)return;const left=Math.ceil((st.restEnd-Date.now
 
 /* ---------- Vistas ---------- */
 function vEntrenar(){
-  if(!st.ex)return `<div class="card center"><h2>Elige un ejercicio</h2><p class="mut">Abre la biblioteca, escoge la variante y vuelve aquí para contar repeticiones.</p><button class="btn" data-act="tab" data-v="biblioteca">Abrir biblioteca</button></div>`;
+  if(!st.ex)return `<div class="card center"><div class="sello">Clasificado</div><h2>Elige un ejercicio</h2><p class="mut">Objetivo: <span class="tach">xxxxxxxxxxxx</span></p><p class="mut">Abre la biblioteca, escoge la variante y vuelve aquí para contar repeticiones.</p><button class="btn" data-act="tab" data-v="biblioteca">Abrir biblioteca</button></div>`;
   const hoy=mem.sets.filter(s=>s.ex===st.ex.id&&dia(s.t)===dia(Date.now()));
   const ult=ultima(st.ex.id);
   const it=st.cola?st.cola[st.colaI]:null;
@@ -62,7 +71,7 @@ function filtrados(){const q=norm(st.q.trim());return EJERCICIOS.filter(e=>(!st.
 function listaHTML(){const l=filtrados();const tot=l.reduce((a,e)=>a+nVar(e),0);return `<div class="mut pad">${l.length} ejercicios · ${tot} variantes</div>`+l.map(e=>`<button class="li link" data-act="ver" data-v="${e.id}"><div><b>${esc(e.n)}</b><div class="mut">${esc(e.g)}${e.sec?' · '+esc(e.sec):''}</div></div><div class="r mut">${nVar(e)} ›</div></button>`).join('');}
 function vBiblioteca(){
   if(st.det)return vDetalle();
-  return `<input class="inp" type="search" placeholder="Buscar ejercicio, músculo o posición…" value="${esc(st.q)}" data-in="q">
+  return `<input class="inp" type="search" placeholder="Buscar ejercicio o músculo…" value="${esc(st.q)}" data-in="q">
   <div class="chips scroll">${['',...GRUPOS].map(g=>`<button class="chip ${st.grupo===g?'on':''}" data-act="grupo" data-v="${esc(g)}">${g||'Todos'}</button>`).join('')}</div>
   <select class="inp" data-in="equipo"><option value="">Cualquier equipo</option>${Object.values(EQUIPOS).map(x=>`<option ${st.equipo===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
   <div id="lista" class="card nopad">${listaHTML()}</div>`;
@@ -81,7 +90,7 @@ function vDetalle(){
   <div class="card"><h3>Tu historial</h3>${ss.length?`<div class="mut">Mejor 1RM estimado: ${best.toFixed(1)} kg</div>`+ss.slice(-6).reverse().map(s=>`<div class="li"><div>${new Date(s.t).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}<div class="mut">${esc(s.v)}</div></div><div class="r">${s.kg} kg × ${s.reps}</div></div>`).join(''):'<div class="mut">Sin registros todavía.</div>'}</div>`;
 }
 function vRutinas(){
-  return `<div class="card"><h2>Rutinas</h2><div class="row"><input id="rnom" class="inp" placeholder="Nombre (p. ej. Empuje A)"><button class="btn sm" data-act="nuevaRut">Crear</button></div><div class="mut">Los ejercicios se añaden desde su ficha en la biblioteca.</div></div>`+
+  return `<div class="card"><h2>Rutinas</h2><div class="row"><input id="rnom" class="inp" placeholder="Nombre de la rutina"><button class="btn sm" data-act="nuevaRut">Crear</button></div><div class="mut">Los ejercicios se añaden desde su ficha en la biblioteca.</div></div>`+
   mem.rutinas.map(r=>`<div class="card"><div class="row sb"><h3>${esc(r.n)}</h3><button class="x" data-act="delRut" data-v="${r.id}">✕</button></div>${r.items.length?r.items.map((it,i)=>`<div class="li"><div><b>${esc(BYID[it.ex]?BYID[it.ex].n:it.ex)}</b><div class="mut">${esc(it.v)}</div></div><div class="r">${it.series}×${it.reps}</div><button class="x" data-act="playItem" data-v="${r.id}:${i}">▶</button><button class="x" data-act="delItem" data-v="${r.id}:${i}">✕</button></div>`).join('')+`<button class="btn" data-act="empezar" data-v="${r.id}">Empezar rutina</button>`:'<div class="mut">Vacía.</div>'}</div>`).join('');
 }
 function vHistorial(){
@@ -108,7 +117,7 @@ const ACT={
   tempo(v){st.tempo=Math.max(1,Math.round((st.tempo+Number(v))*10)/10);if(st.run)parar();else render();},
   sens(v){st.sens=Number(v);render();},
   auto(){if(st.run)parar();else arrancar();},
-  guardar(){if(!st.reps){toast('Cuenta al menos una repetición');return;}parar();mem.sets.push({t:Date.now(),ex:st.ex.id,n:st.ex.n,v:st.vari,reps:st.reps,kg:st.kg});save();st.reps=0;st.restEnd=Date.now()+mem.cfg.descanso*1000;beep(660,0.12);render();},
+  guardar(){if(!st.reps){toast('Cuenta al menos una repetición');return;}parar();mem.sets.push({t:Date.now(),ex:st.ex.id,n:st.ex.n,v:st.vari,reps:st.reps,kg:st.kg});save();st.reps=0;st.restEnd=Date.now()+mem.cfg.descanso*1000;fx('ok');render();},
   descanso(v){mem.cfg.descanso=Number(v);save();if(st.restEnd)st.restEnd=Date.now()+mem.cfg.descanso*1000;render();},
   saltar(){st.restEnd=0;render();},
   sig(){if(st.colaI<st.cola.length-1){st.colaI++;st.restEnd=0;cargarCola();}else{st.cola=null;st.ex=null;st.restEnd=0;render();toast('Rutina terminada');}},
@@ -130,11 +139,12 @@ const ACT={
 };
 function init(){
   load();
-  document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f)f(b.dataset.v,b);});
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
   document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
   document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);save();render();toast('Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&st.tab==='entrenar'&&st.ex)wake();});
   if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.tipo==='actualizada')toast('Actualización descargada: cierra y abre la app para verla',6000);});}
   render();
+  try{if(navigator.audioSession)navigator.audioSession.type='ambient';}catch(e){}
 }
 if(typeof document!=='undefined'&&document.getElementById)init();
