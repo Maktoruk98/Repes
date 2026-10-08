@@ -24,12 +24,39 @@ function toast(m,ms){const t=$('#toast');if(!t)return;t.textContent=m;t.classLis
 
 /* ---------- Sonidos de la interfaz ---------- */
 // Cada sonido es una lista de tonos: [frecuencia inicial, final, retraso, duración, volumen, forma de onda]
-const FX={tap:[[1500,2300,0,0.05,0.09]],sel:[[1100,700,0,0.07,0.09,'triangle'],[2200,1400,0,0.05,0.03]],nav:[[520,1560,0,0.12,0.08],[780,2340,0.045,0.11,0.05]],baja:[[900,280,0,0.14,0.09,'triangle']],rep:[[880,1320,0,0.07,0.14],[1760,2640,0,0.05,0.04]],meta:[[880,880,0,0.09,0.13],[1320,1320,0.08,0.09,0.13],[1760,1760,0.16,0.2,0.14]],ok:[[660,660,0,0.09,0.12],[990,990,0.09,0.16,0.12]]};
+const FX={tap:[[1500,2300,0,0.05,0.09]],letra:[[1900,1900,0,0.035,0.07]],sel:[[1100,700,0,0.07,0.09,'triangle'],[2200,1400,0,0.05,0.03]],nav:[[520,1560,0,0.12,0.08],[780,2340,0.045,0.11,0.05]],baja:[[900,280,0,0.14,0.09,'triangle']],rep:[[880,1320,0,0.07,0.14],[1760,2640,0,0.05,0.04]],meta:[[880,880,0,0.09,0.13],[1320,1320,0.08,0.09,0.13],[1760,1760,0.16,0.2,0.14]],ok:[[660,660,0,0.09,0.12],[990,990,0.09,0.16,0.12]]};
 let fxBus=null;
 function audio(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();return ac;}
 function bus(){if(fxBus)return fxBus;const a=audio();fxBus=a.createGain();fxBus.connect(a.destination);const d=a.createDelay(0.5),fb=a.createGain(),w=a.createGain();d.delayTime.value=0.085;fb.gain.value=0.28;w.gain.value=0.3;fxBus.connect(d);d.connect(fb);fb.connect(d);d.connect(w);w.connect(a.destination);return fxBus;}
 function fx(n){try{bus();(FX[n]||[]).forEach(p=>{const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+p[2];o.type=p[5]||'sine';o.frequency.setValueAtTime(p[0],t);o.frequency.exponentialRampToValueAtTime(p[1],t+p[3]);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(p[4],t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+p[3]);o.connect(g);g.connect(fxBus);o.start(t);o.stop(t+p[3]+0.02);});}catch(e){}}
 function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar')return;fx(b.closest('nav')||a==='ver'||a==='volver'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
+
+/* ---------- Pantalla de acceso ---------- */
+// Es un adorno, no una protección: el código está a la vista en este archivo.
+const CODIGO='0000';
+const AGENTE='Peter Sutherland';
+const agente=()=>String(mem.cfg.agente||'').trim().slice(0,24)||AGENTE;
+const VOZ='./voz-acceso.mp3';
+let voz=null;
+function cargarVoz(){if(!location.protocol.startsWith('http'))return;fetch(VOZ).then(r=>r.ok?r.arrayBuffer():null).then(b=>{if(!b)return;ac=ac||new (window.AudioContext||window.webkitAudioContext)();return new Promise((ok,no)=>ac.decodeAudioData(b,ok,no));}).then(buf=>{voz=buf||null;}).catch(()=>{});}
+function acceso(){
+  const el=document.createElement('div');el.id='acceso';el.className='pide';
+  el.innerHTML='<div class="ac-aro"><svg viewBox="0 0 60 60" aria-hidden="true"><path d="M16 31l10 10 19-22"/></svg><b></b></div><div class="ac-tit">Verificación de credenciales</div><div class="ac-sub">Introduce tu código de acceso</div><div class="ac-cod">'+'<i></i>'.repeat(CODIGO.length)+'</div><div class="ac-tec">'+[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<span></span>':'<button data-k="'+k+'"'+(k==='⌫'?' aria-label="Borrar"':'')+'>'+k+'</button>').join('')+'</div>';
+  document.body.appendChild(el);
+  const tit=el.querySelector('.ac-tit'),sub=el.querySelector('.ac-sub'),pct=el.querySelector('.ac-aro b');
+  let cod='',bloq=false;const nom=agente();
+  const pinta=()=>el.querySelectorAll('.ac-cod i').forEach((c,i)=>{c.classList.toggle('on',i<cod.length);c.textContent=i<cod.length?'•':'';});
+  const estado=(cls,t,s)=>{el.className=cls;tit.textContent=t;sub.textContent=s;};
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b||bloq)return;fx('tap');if(b.dataset.k==='⌫')cod=cod.slice(0,-1);else cod+=b.dataset.k;pinta();if(cod.length===CODIGO.length)comprobar();});
+  function comprobar(){bloq=true;estado('verif','Autenticando','Comprobando credenciales');fx('nav');const pasos=['Comprobando credenciales','Verificando identidad','Descifrando expediente'],t0=Date.now();
+    const id=setInterval(()=>{const f=Math.min(1,(Date.now()-t0)/1700);pct.textContent=Math.round(f*100)+'%';sub.textContent=pasos[Math.min(2,Math.floor(f*3))];if(f>=1){clearInterval(id);pct.textContent='';if(cod===CODIGO)concedido();else denegado();}},40);}
+  function concedido(){estado('ok','Autenticación completada','Acceso concedido');fx('meta');let espera=1300+nom.length*70+1300;
+    if(voz){try{const s=ac.createBufferSource();s.buffer=voz;s.connect(ac.destination);s.start(ac.currentTime+0.35);espera=Math.max(espera,(voz.duration+0.9)*1000);}catch(e){}}
+    setTimeout(bienvenida,1300);
+    setTimeout(()=>{el.classList.add('fuera');setTimeout(()=>el.remove(),600);},espera);}
+  function bienvenida(){estado('bien','','Bienvenido');let i=0;const id=setInterval(()=>{const c=nom.charAt(i++);tit.textContent=nom.slice(0,i);if(c!==' ')fx('letra');if(i>=nom.length)clearInterval(id);},70);}
+  function denegado(){estado('no','Acceso denegado','Código incorrecto');fx('baja');setTimeout(()=>{cod='';pinta();bloq=false;estado('pide','Verificación de credenciales','Introduce tu código de acceso');},1400);}
+}
 
 /* ---------- Contador ---------- */
 let tempoId=0,sen=null;
@@ -96,7 +123,7 @@ function vRutinas(){
 function vHistorial(){
   const days={};mem.sets.forEach(s=>{(days[dia(s.t)]=days[dia(s.t)]||[]).push(s);});
   const keys=Object.keys(days).sort((a,b)=>new Date(b)-new Date(a));
-  return `<div class="card"><h2>Historial</h2><div class="mut">${keys.length} ${keys.length===1?'día':'días'} · ${mem.sets.length} ${mem.sets.length===1?'serie':'series'}</div><div class="row"><button class="btn sm" data-act="exportar">Exportar copia</button><button class="btn sm ghost" data-act="importar">Importar copia</button><input type="file" id="imp" accept="application/json,.json" hidden></div><div class="mut">Los datos solo viven en este iPhone. Exporta una copia de vez en cuando.</div><div class="mut" id="ver"></div></div>`+
+  return `<div class="card"><h2>Historial</h2><div class="mut">${keys.length} ${keys.length===1?'día':'días'} · ${mem.sets.length} ${mem.sets.length===1?'serie':'series'}</div><div class="row"><button class="btn sm" data-act="exportar">Exportar copia</button><button class="btn sm ghost" data-act="importar">Importar copia</button><input type="file" id="imp" accept="application/json,.json" hidden></div><div class="mut">Los datos solo viven en este iPhone. Exporta una copia de vez en cuando.</div><div class="mut" id="ver"></div><h3>Nombre de agente</h3><input class="inp" data-in="agente" maxlength="24" autocomplete="off" placeholder="${esc(AGENTE)}" value="${esc(mem.cfg.agente||'')}"><div class="mut">Es el nombre del saludo al entrar. Se guarda solo en este iPhone.</div></div>`+
   (keys.length?keys.map(k=>{const ss=days[k];const vol=ss.reduce((a,s)=>a+s.kg*s.reps,0);return `<div class="card"><h3>${fechaLarga(ss[0].t)}</h3><div class="mut">${ss.length} series · ${Math.round(vol)} kg de volumen</div>${ss.map(s=>`<div class="li"><div><b>${esc(s.n)}</b><div class="mut">${esc(s.v)}</div></div><div class="r">${s.kg} kg × ${s.reps}</div><button class="x" data-act="delSet" data-v="${s.t}">✕</button></div>`).join('')}</div>`;}).join(''):'<div class="card mut">Aún no hay series guardadas.</div>');
 }
 function verVersion(){if(typeof caches==='undefined')return;Promise.all(['./index.html','./app.js','./exercises.js'].map(u=>caches.match(u))).then(rs=>{const t=Math.max(0,...rs.map(r=>r?Date.parse(r.headers.get('last-modified')||'')||0:0));const el=$('#ver');if(t&&el)el.textContent='Versión publicada el '+new Date(t).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}).catch(()=>{});}
@@ -140,11 +167,12 @@ const ACT={
 function init(){
   load();
   document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
-  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
+  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
   document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);save();render();toast('Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&st.tab==='entrenar'&&st.ex)wake();});
   if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.tipo==='actualizada')toast('Actualización descargada: cierra y abre la app para verla',6000);});}
   render();
   try{if(navigator.audioSession)navigator.audioSession.type='ambient';}catch(e){}
+  acceso();cargarVoz();
 }
 if(typeof document!=='undefined'&&document.getElementById)init();
