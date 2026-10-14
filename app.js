@@ -20,7 +20,7 @@ function ultima(id){const prev=mem.sets.filter(s=>s.ex===id&&dia(s.t)!==dia(Date
 
 /* ---------- Sonido, pantalla encendida, avisos ---------- */
 let ac,wl,toastId;
-function beep(f,d){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f||880;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(0.25,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+(d||0.08));o.start();o.stop(ac.currentTime+(d||0.08));}catch(e){}}
+function beep(f,d){try{audio();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f||880;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(0.25,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+(d||0.08));o.start();o.stop(ac.currentTime+(d||0.08));}catch(e){}}
 async function wake(){try{if('wakeLock' in navigator&&(!wl||wl.released))wl=await navigator.wakeLock.request('screen');}catch(e){}}
 function toast(m,ms){const t=$('#toast');if(!t)return;t.textContent=m;t.classList.add('on');clearTimeout(toastId);toastId=setTimeout(()=>t.classList.remove('on'),ms||2200);}
 
@@ -28,7 +28,10 @@ function toast(m,ms){const t=$('#toast');if(!t)return;t.textContent=m;t.classLis
 // Cada sonido es una lista de tonos: [frecuencia inicial, final, retraso, duración, volumen, forma de onda]
 const FX={tap:[[1500,2300,0,0.05,0.09]],letra:[[1900,1900,0,0.035,0.07]],sel:[[1100,700,0,0.07,0.09,'triangle'],[2200,1400,0,0.05,0.03]],nav:[[520,1560,0,0.12,0.08],[780,2340,0.045,0.11,0.05]],baja:[[900,280,0,0.14,0.09,'triangle']],rep:[[880,1320,0,0.07,0.14],[1760,2640,0,0.05,0.04]],meta:[[880,880,0,0.09,0.13],[1320,1320,0.08,0.09,0.13],[1760,1760,0.16,0.2,0.14]],ok:[[660,660,0,0.09,0.12],[990,990,0.09,0.16,0.12]],con:[[660,1320,0,0.14,0.14],[1320,2640,0,0.1,0.04]],exc:[[1100,550,0,0.24,0.11,'triangle']]};
 let fxBus=null;
-function audio(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();return ac;}
+// Al bloquear el iPhone, Safari deja el audio «interrupted» (no «suspended»): hay que reanudarlo en cualquier estado.
+function audio(){if(ac&&ac.state==='closed')ac=null;ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state!=='running')try{ac.resume().catch(()=>{});}catch(e){}return ac;}
+// Con un toque del usuario, un audio que no responde se sustituye por uno nuevo, que iOS sí deja sonar.
+function despierta(gesto){if(!ac||ac.state==='running')return;if(gesto){try{ac.close();}catch(e){}ac=null;fxBus=null;}try{audio();}catch(e){}}
 function bus(){if(fxBus)return fxBus;const a=audio();fxBus=a.createGain();fxBus.connect(a.destination);const d=a.createDelay(0.5),fb=a.createGain(),w=a.createGain();d.delayTime.value=0.085;fb.gain.value=0.28;w.gain.value=0.3;fxBus.connect(d);d.connect(fb);fb.connect(d);d.connect(w);w.connect(a.destination);return fxBus;}
 function fx(n){try{bus();(FX[n]||[]).forEach(p=>{const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+p[2];o.type=p[5]||'sine';o.frequency.setValueAtTime(p[0],t);o.frequency.exponentialRampToValueAtTime(p[1],t+p[3]);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(p[4],t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+p[3]);o.connect(g);g.connect(fxBus);o.start(t);o.stop(t+p[3]+0.02);});}catch(e){}}
 function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar'||a==='evGuardar'||a==='sRep'||a==='sHecha')return;fx(b.closest('nav')||a==='ver'||a==='volver'||a==='perfil'||a==='salir'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
@@ -311,7 +314,9 @@ function init(){
   document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
   document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
   document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);sana();save();render();toast('Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(st.s||st.tab==='entrenar'&&st.ex))wake();});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;despierta(false);if(st.s||st.tab==='entrenar'&&st.ex)wake();
+    setTimeout(()=>{if(st.s&&!st.s.fin&&ac&&ac.state!=='running')toast('Toca la pantalla para recuperar el sonido',5000);},700);});
+  document.addEventListener('pointerdown',()=>despierta(true),true);
   if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.tipo==='actualizada')toast('Actualización descargada: cierra y abre la app para verla',6000);});}
   render();
   try{if(navigator.audioSession)navigator.audioSession.type='ambient';}catch(e){}
