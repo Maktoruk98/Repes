@@ -4,7 +4,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const KEY='repes.v1';
 let mem={sets:[],rutinas:[],cfg:{descanso:90}};
-const st={perfil:null,ult:{},ev:null,s:null,tab:'entrenar',ex:null,vari:'',det:null,sel:{eq:0,pos:0,ag:0,uni:false,tec:0},reps:0,kg:20,obj:10,modo:'manual',q:'',grupo:'',equipo:'',restEnd:0,tempo:3,sens:1.3,run:false,cola:null,colaI:0};
+const st={perfil:null,ult:{},ev:null,s:null,cl:{txt:'',res:null},tab:'entrenar',ex:null,vari:'',det:null,sel:{eq:0,pos:0,ag:0,uni:false,tec:0},reps:0,kg:20,obj:10,modo:'manual',q:'',grupo:'',equipo:'',restEnd:0,tempo:3,sens:1.3,run:false,cola:null,colaI:0};
 const BYID={};EJERCICIOS.forEach(e=>BYID[e.id]=e);
 
 // Repara lo que falte en datos antiguos o importados sin tocar lo demás.
@@ -216,11 +216,75 @@ function vEvaluacion(){
   if(!ev){const u=mem.ev;return `<div class="card"><h2>Evaluación</h2><p class="mut">${EV_P.length} preguntas sobre tu objetivo, tu experiencia y tu tiempo. Con las respuestas se prepara una rutina por días.</p>${u?`<div class="sel">Última: ${new Date(u.t).toLocaleDateString('es-ES',{day:'numeric',month:'long'})} · ${esc(EV_NOM[u.r.obj]||'')} · ${esc(u.r.dias)} días por semana</div>`:''}<button class="btn" data-act="evIni">${u?'Repetir evaluación':'Empezar evaluación'}</button></div>`;}
   if(ev.res){const d=ev.res.descanso;return `<div class="card"><div class="tag">Evaluación completada</div><h2>Tu rutina</h2><div class="mut">${esc(EV_NOM[ev.r.obj])} · ${ev.res.rutinas.length} días · descanso entre series ${d<60?d+' s':mmss(d)}</div>${ev.res.sinCardio?'<div class="mut">No hay cardio compatible con tu equipo y tus zonas a evitar.</div>':''}</div>`+
     ev.res.rutinas.map(r=>`<div class="card"><h3>${esc(r.n.replace('Evaluación · ',''))}</h3>${r.items.length?r.items.map(it=>`<div class="li"><div><b>${esc(it.n)}</b><div class="mut">${esc(it.v)}</div></div><div class="r">${evPlan(it)}</div></div>`).join(''):'<div class="mut">Sin ejercicios compatibles.</div>'}</div>`).join('')+
-    `<button class="btn" data-act="evGuardar">Guardar en Rutinas</button><button class="btn ghost" data-act="evIni">Repetir evaluación</button><div class="mut">Al guardar se sustituyen las rutinas de una evaluación anterior y se ajusta el descanso. Las rutinas que hayas creado tú no se tocan.</div>`;}
+    `<button class="btn" data-act="evGuardar">Guardar en Rutinas</button><button class="btn ghost" data-act="evIni">Repetir evaluación</button><div class="mut">Al guardar se sustituyen las rutinas de una evaluación anterior y se ajusta el descanso. Las rutinas que hayas creado tú no se tocan.</div><div class="mut">¿Quieres una rutina más completa con tus notas? La evaluación ya está en la pestaña Claude.</div>`;}
   const p=EV_P[ev.i];
   return `<div class="card"><div class="tag">Pregunta ${ev.i+1} de ${EV_P.length}</div><div class="bar"><i style="width:${(ev.i+1)/EV_P.length*100}%"></i></div><h2>${p.q}</h2>${p.a?`<div class="mut">${p.a}</div>`:''}
     <div class="chips col">${p.o.map((o,j)=>`<button class="chip ${(p.m?ev.r[p.k].includes(o[0]):ev.r[p.k]===o[0])?'on':''}" data-act="evOp" data-v="${j}">${esc(o[1])}</button>`).join('')}</div>
+    ${ev.abiertas[p.k]||ev.r.notas[p.k]?`<h3>Cuéntame más</h3><textarea class="inp" rows="3" maxlength="1000" data-in="evNota" placeholder="Cuéntalo con tus palabras">${esc(ev.r.notas[p.k]||'')}</textarea><div class="mut">La nota no cambia la rutina que prepara la app: va en el MD para Claude.</div>`:'<button class="btn sm ghost" data-act="evNota">Cuéntame más</button>'}
     <div class="row sb"><button class="btn sm ghost" data-act="evAtras">Atrás</button><button class="btn sm" data-act="evSig">${ev.i<EV_P.length-1?'Siguiente':'Generar rutina'}</button></div></div>`;
+}
+
+/* ---------- Claude: intercambio por MD ---------- */
+// Pablo prepara un MD con la evaluación, las notas y el formato de respuesta. Claude contesta con un bloque
+// REPES-RUTINA … FIN-RUTINA que la app lee, revisa y guarda en Rutinas.
+const evResp=(p,r)=>{const v=r[p.k],et=x=>{const o=p.o.find(o=>o[0]===x);return o?o[1]:String(x);};return p.m?(v&&v.length?v.map(et).join(', '):'Ninguna'):v===undefined?'Sin responder':et(v);};
+function mdEval(){
+  const u=mem.ev,r=u.r,notas=r.notas||{},gen=evGenerar(r,EJERCICIOS);
+  const L=[`# Evaluación de Repes · ${new Date(u.t).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})}`,'',
+    '> Para Claude: soy Larry y uso Repes, mi app de gimnasio. Prepárame una rutina más completa que la que propone la app, teniendo en cuenta mis respuestas y, sobre todo, mis notas. Responde en el formato del final para que la app pueda leerla.','','## Mis respuestas'];
+  EV_P.forEach(p=>{L.push(`- **${p.q}** ${evResp(p,r)}`);if(notas[p.k])L.push('  - Nota: '+notas[p.k].replace(/\s*\n\s*/g,' '));});
+  L.push('',`## Rutina que propone la app (descanso ${gen.descanso} s)`);
+  gen.rutinas.forEach(rt=>{L.push('### '+rt.n.replace('Evaluación · ',''));rt.items.forEach(it=>L.push(`- ${it.n} | ${it.v} | ${it.min?it.reps+'min':it.series+'x'+it.reps}`));});
+  L.push('','## Formato de la respuesta (obligatorio)','Explica lo que quieras fuera del bloque, pero la rutina va entre las líneas REPES-RUTINA y FIN-RUTINA, así:','','```','REPES-RUTINA','DESCANSO: 90','## Lunes · Torso A','- Press de banca | Barra · Plano | 4x8','- Plancha | Peso corporal · Frontal | 3x30s','- Bicicleta estática | Máquina · Ritmo continuo | 20min','## Miércoles · Pierna A','- Sentadilla | Barra · De pie | 4x6','FIN-RUTINA','```','',
+    'Reglas:','- Una línea `## Día · Nombre` por rutina. Días posibles: lunes, martes, miércoles, jueves, viernes, sábado, domingo. Cada día solo puede tener una rutina.',
+    '- Una línea por ejercicio: `- Nombre exacto | Equipo · posición o detalle | series x repeticiones`. Para lo que va por tiempo: `3x30s`. Para cardio: `20min`.',
+    '- Usa solo ejercicios de la lista siguiente, con el nombre exacto, y uno de sus equipos.','- DESCANSO son los segundos entre series (opcional).','','## Ejercicios disponibles');
+  GRUPOS.forEach(g=>L.push(`- **${g}:** `+EJERCICIOS.filter(e=>e.g===g).map(e=>`${e.n} (${e.eq.join(', ')})`).join('; ')));
+  return L.join('\n')+'\n';
+}
+const DIA_N=n=>norm(n).replace(/[^a-z]/g,'');
+function leeRespuesta(txt){
+  const ls=String(txt).split(/\r?\n/).map(l=>l.trim());
+  // Se usa el último bloque: si se pega también el ejemplo de las instrucciones, manda la respuesta.
+  let a=-1;ls.forEach((l,i)=>{if(/^REPES-RUTINA\b/i.test(l.replace(/^`+\s*/,'')))a=i;});const b=ls.findIndex((l,i)=>i>a&&/FIN-RUTINA/i.test(l));
+  const cuerpo=a>=0?ls.slice(a+1,b>a?b:undefined):ls;
+  const out={rutinas:[],descanso:0,avisos:[]},porNombre={},usados={};
+  const clave=s=>norm(s).replace(/[^a-z0-9]/g,''),sinPar=s=>clave(String(s).replace(/\([^)]*\)/g,''));
+  EJERCICIOS.forEach(e=>{porNombre[clave(e.n)]=e;porNombre[sinPar(e.n)]=porNombre[sinPar(e.n)]||e;porNombre[e.id.replace(/-/g,'')]=e;});
+  let cur=null;
+  cuerpo.forEach(l=>{
+    let m;
+    if((m=l.match(/^descanso\s*:?\s*(\d+)/i))){const d=Number(m[1]);if(d>=15&&d<=600)out.descanso=d;else out.avisos.push('Descanso de '+d+' s fuera de rango: no se cambia.');return;}
+    if((m=l.match(/^#{2,3}\s*(.+)$/))){const partes=m[1].split(/\s*[·|:—–-]\s*/),dias=[];let i=0;
+      for(;i<partes.length;i++){const ds=partes[i].split(/\s*(?:,|\by\b|\/)\s*/).map(x=>DIAS_N.map(DIA_N).indexOf(DIA_N(x)));if(ds.length&&ds.every(d=>d>=0))ds.forEach(d=>dias.push(d));else break;}
+      const nombre=partes.slice(i).join(' · ')||m[1];
+      const libres=dias.filter(d=>{if(usados[d]){out.avisos.push(`El ${DIAS_N[d]} ya tenía rutina: «${nombre}» no se asigna a ese día.`);return false;}usados[d]=1;return true;});
+      cur={n:nombre.slice(0,60),dias:libres,items:[]};out.rutinas.push(cur);return;}
+    if((m=l.match(/^[-*•]\s*(.+)$/))&&cur){const p=m[1].split('|').map(x=>x.trim().replace(/\*\*/g,''));
+      const e=porNombre[clave(p[0])]||porNombre[sinPar(p[0])];
+      if(!e){out.avisos.push(`«${p[0]}» no está en la biblioteca: no se añade.`);return;}
+      const plan=(p[p.length-1]||'').toLowerCase().replace(/\s/g,'');let q;const it={ex:e.id,v:''};
+      if((q=plan.match(/^(\d+)min/))){it.series=1;it.reps=Math.min(120,Math.max(1,+q[1]));it.min=true;}
+      else if((q=plan.match(/^(\d+)[x×](\d+)/))){it.series=Math.min(10,Math.max(1,+q[1]));it.reps=Math.min(100,Math.max(1,+q[2]));}
+      else{out.avisos.push(`«${e.n}»: no entiendo «${p[p.length-1]||''}», se pone 3x10.`);it.series=3;it.reps=10;}
+      const v=p.length>2?p[1]:'',eq=e.eq.find(x=>norm(v).startsWith(norm(x)));
+      if(v&&!eq)out.avisos.push(`«${e.n}»: el equipo «${v}» no le corresponde, se usa ${e.eq[0]}.`);
+      it.v=(eq?v:e.eq[0]+' · '+e.pos[0]).slice(0,80);cur.items.push(it);}
+  });
+  out.rutinas=out.rutinas.filter(r=>r.items.length);
+  if(!out.rutinas.length)out.error=a<0?'No encuentro el bloque REPES-RUTINA en lo que has pegado.':'El bloque no tiene ninguna rutina con ejercicios que la app conozca.';
+  return out;
+}
+function vClaude(){
+  if(!mem.ev||!mem.ev.r)return `<div class="card"><h2>Claude</h2><p class="mut">Primero haz la evaluación en la pestaña Evaluar.</p></div>`;
+  const u=mem.ev,nn=Object.keys(u.r.notas||{}).length,c=st.cl,res=c.res;
+  return `<div class="card"><h2>Enviar a Claude</h2><p class="mut">Evaluación del ${new Date(u.t).toLocaleDateString('es-ES',{day:'numeric',month:'long'})} · ${esc(EV_NOM[u.r.obj]||'')} · ${nn?nn+(nn===1?' nota':' notas'):'sin notas'}. Cópiala y pégasela a Claude: lleva tus respuestas, tus notas y las instrucciones para que conteste en el formato de la app.</p>
+    <div class="row"><button class="btn sm" data-act="clCopia">Copiar para Claude</button>${typeof navigator!=='undefined'&&navigator.share?'<button class="btn sm ghost" data-act="clComparte">Compartir</button>':''}<button class="btn sm ghost" data-act="clBaja">Descargar .md</button></div></div>
+  <div class="card"><h2>Respuesta de Claude</h2><textarea class="inp" rows="6" data-in="clRes" placeholder="Pega aquí la respuesta completa de Claude">${esc(c.txt)}</textarea><button class="btn" data-act="clLee">Leer respuesta</button>
+    ${res&&res.error?`<div class="mut warn">${esc(res.error)}</div>`:''}</div>`+
+  (res&&!res.error?`<div class="card"><div class="tag">Revisa antes de guardar</div><h3>${res.rutinas.length} ${res.rutinas.length===1?'rutina':'rutinas'}${res.descanso?' · descanso '+(res.descanso<60?res.descanso+' s':mmss(res.descanso)):''}</h3>${res.avisos.map(a=>`<div class="mut warn">${esc(a)}</div>`).join('')}</div>`+
+    res.rutinas.map(r=>`<div class="card"><h3>${esc(r.n)}</h3><div class="mut">${r.dias.length?r.dias.map(d=>DIAS_N[d]).join(', '):'Sin día: se asignará al guardar'}</div>${r.items.map(it=>`<div class="li"><div><b>${esc(BYID[it.ex].n)}</b><div class="mut">${esc(it.v)}</div></div><div class="r">${it.min?it.reps+' min':it.series+'×'+it.reps}</div></div>`).join('')}</div>`).join('')+
+    `<button class="btn" data-act="clGuarda">Guardar en Rutinas</button><button class="btn ghost" data-act="clFuera">Descartar</button><div class="mut">Sustituye las rutinas de la evaluación anterior. Las que hayas creado tú no se tocan.</div>`:'');
 }
 
 /* ---------- Entrenador ---------- */
@@ -295,7 +359,7 @@ function vHoy(){
   ${f==='descanso'&&s.ult&&(s.ultTipo==='tempo'||s.ultTipo==='libre')?`<div class="card"><div class="row sb"><span>Repeticiones guardadas</span><span class="row"><button class="x" data-act="sReps" data-v="-1">−</button><b>${s.ult.reps}</b><button class="x" data-act="sReps" data-v="1">+</button></span></div><div class="mut">Corrígelo si no completaste la serie.</div></div>`:''}
   <div class="row c"><button class="btn sm" data-act="sPausa">${s.pausa?'Seguir':'Pausa'}</button><button class="btn sm ghost${s.conf>Date.now()?' warn':''}" data-act="sFin">${s.conf>Date.now()?'¿Seguro?':'Terminar'}</button></div>`;
 }
-const VIEWS={entrenar:vEntrenar,biblioteca:vBiblioteca,rutinas:vRutinas,historial:vHistorial,evaluacion:vEvaluacion,hoy:vHoy};
+const VIEWS={entrenar:vEntrenar,biblioteca:vBiblioteca,rutinas:vRutinas,historial:vHistorial,evaluacion:vEvaluacion,claude:vClaude,hoy:vHoy};
 
 /* ---------- Perfiles ---------- */
 // Cada perfil abre sus propias pestañas. Sin `tabs`, el expediente aún no está disponible.
@@ -308,7 +372,7 @@ const SIL={
 const PERFILES={
   peter:{ag:'Peter Sutherland',s:'h',tabs:[['hoy','Hoy']]},
   gym:{ag:'Mercedes Dantés',s:'n',tabs:[['biblioteca','Biblioteca'],['rutinas','Rutinas'],['historial','Historial']]},
-  eval:{ag:'Pablo Lopez',s:'p',tabs:[['evaluacion','Evaluación']]},
+  eval:{ag:'Pablo Lopez',s:'p',tabs:[['evaluacion','Evaluar'],['claude','Claude']]},
   nutri:{ag:'Diane Far',s:'m'}};
 function vExpedientes(){return `<div class="rejilla">${Object.keys(PERFILES).map(k=>{const p=PERFILES[k];return `<button class="card perfil ${p.tabs?'':'off'}" data-act="perfil" data-v="${k}"><div class="foto"><svg viewBox="0 0 100 120" aria-hidden="true">${SIL[p.s]}</svg></div><b>${esc(p.ag)}</b></button>`;}).join('')}</div>`;}
 function render(){
@@ -332,6 +396,17 @@ const ACT={
   sReps(v){const s=st.s;if(!s.ult)return;s.ult.reps=Math.max(1,s.ult.reps+Number(v));save();render();},
   sFin(){const s=st.s;if(s.conf>Date.now()){st.s=null;render();toast('Entrenamiento terminado. Las series hechas están guardadas',3500);}else{s.conf=Date.now()+3000;render();}},
   sCerrar(){st.s=null;render();window.scrollTo(0,0);},
+  clCopia(){try{navigator.clipboard.writeText(mdEval()).then(()=>toast('Copiado. Pégaselo a Claude'),()=>toast('No se pudo copiar: usa Descargar'));}catch(e){toast('No se pudo copiar: usa Descargar');}},
+  clComparte(){navigator.share({title:'Evaluación de Repes',text:mdEval()}).catch(()=>{});},
+  clBaja(){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mdEval()],{type:'text/markdown'}));a.download='evaluacion-repes-'+new Date().toISOString().slice(0,10)+'.md';document.body.appendChild(a);a.click();a.remove();}catch(e){toast('No se pudo descargar');}},
+  clLee(){st.cl.res=leeRespuesta(st.cl.txt);render();},
+  clFuera(){st.cl={txt:'',res:null};render();window.scrollTo(0,0);},
+  clGuarda(){const res=st.cl.res;if(!res||res.error)return;const t=Date.now(),libres=EV_DIAS[res.rutinas.length]||[],ocup=new Set(res.rutinas.flatMap(r=>r.dias).concat(mem.rutinas.filter(r=>!r.ev).flatMap(r=>r.dias||[])));
+    const pool=libres.concat([1,2,3,4,5,6,0]).filter((d,i,a)=>a.indexOf(d)===i&&!ocup.has(d));
+    const nuevas=res.rutinas.map((r,i)=>({id:t+i,n:r.n,ev:1,dias:r.dias.length?r.dias:(pool.length?[pool.shift()]:[]),items:r.items}));
+    const ds=nuevas.flatMap(r=>r.dias);
+    mem.rutinas=mem.rutinas.filter(r=>!r.ev).map(r=>r.dias?Object.assign(r,{dias:r.dias.filter(d=>!ds.includes(d))}):r).concat(nuevas);
+    if(res.descanso)mem.cfg.descanso=res.descanso;save();st.cl={txt:'',res:null};fx('ok');render();window.scrollTo(0,0);toast('Rutinas de Claude guardadas. Están en '+PERFILES.gym.ag+' › Rutinas',4500);},
   syNuevo(){sy.code=nuevoCodigo();sy.err='';sy.ult=0;sySave();render();sincroniza().then(ok=>{if(ok)toast('Sincronización activada');});},
   syUnir(){const c=(($('#syCod')||{}).value||'').toUpperCase().replace(/0/g,'O').replace(/1/g,'I').replace(/8/g,'B').replace(/[^A-Z2-7]/g,'');
     if(c.length!==16){sy.err='El código tiene 16 caracteres';pintaSync();return;}
@@ -341,10 +416,12 @@ const ACT={
   delSync(v,b){if(!seguro(b,'¿Seguro?'))return;sy.code='';sy.err='';sy.ult=0;sySave();render();toast('Sincronización desactivada en este dispositivo');},
   rutDia(v){const p=v.split(':'),r=rut(p[0]),d=Number(p[1]);if(!r)return;if((r.dias||[]).includes(d))r.dias=r.dias.filter(x=>x!==d);else{mem.rutinas.forEach(x=>{if(x.dias)x.dias=x.dias.filter(y=>y!==d);});r.dias=(r.dias||[]).concat(d);}save();render();},
   salir(){if(st.s&&!st.s.fin){toast('Termina o completa el entrenamiento antes de salir');return;}if(st.perfil)st.ult[st.perfil]=st.tab;st.perfil=null;st.det=null;render();window.scrollTo(0,0);},
-  evIni(){st.ev={i:0,r:{evitar:[],fortalecer:[],prioridad:[]},res:null};render();window.scrollTo(0,0);},
+  evIni(){st.ev={i:0,r:{evitar:[],fortalecer:[],prioridad:[],notas:{}},abiertas:{},res:null};render();window.scrollTo(0,0);},
+  evNota(){const ev=st.ev;ev.abiertas[EV_P[ev.i].k]=1;render();const t=$('textarea[data-in="evNota"]');if(t)t.focus();},
   evOp(v){const ev=st.ev,p=EV_P[ev.i],x=p.o[Number(v)][0];if(p.m){const a=ev.r[p.k],k=a.indexOf(x);if(k>=0)a.splice(k,1);else{a.push(x);if(p.x)ev.r[p.x]=ev.r[p.x].filter(z=>z!==x);}}else ev.r[p.k]=x;render();},
   evAtras(){if(st.ev.i)st.ev.i--;else st.ev=null;render();},
-  evSig(){const ev=st.ev,p=EV_P[ev.i];if(!p.m&&ev.r[p.k]===undefined){toast('Elige una opción');return;}if(ev.i<EV_P.length-1)ev.i++;else ev.res=evGenerar(ev.r,EJERCICIOS);render();window.scrollTo(0,0);},
+  evSig(){const ev=st.ev,p=EV_P[ev.i];if(!p.m&&ev.r[p.k]===undefined){toast('Elige una opción');return;}const n=ev.r.notas;Object.keys(n).forEach(k=>{n[k]=n[k].trim();if(!n[k])delete n[k];});
+    if(ev.i<EV_P.length-1)ev.i++;else{ev.res=evGenerar(ev.r,EJERCICIOS);mem.ev={t:Date.now(),r:JSON.parse(JSON.stringify(ev.r))};save();}render();window.scrollTo(0,0);},
   evGuardar(){const ev=st.ev;if(!ev||!ev.res)return;const t=Date.now();
     const ds=EV_DIAS[ev.res.rutinas.length]||[];
     mem.rutinas=mem.rutinas.filter(r=>!r.ev).map(r=>r.dias?Object.assign(r,{dias:r.dias.filter(d=>!ds.includes(d))}):r).concat(ev.res.rutinas.map((r,i)=>({id:t+i,n:r.n,ev:1,dias:ds[i]===undefined?[]:[ds[i]],items:r.items.map(it=>{const o={ex:it.ex,v:it.v,series:it.series,reps:it.reps};if(it.min)o.min=true;return o;})})));
@@ -382,7 +459,7 @@ const ACT={
 function init(){
   load();
   document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
-  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
+  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='evNota'&&st.ev){st.ev.r.notas[EV_P[st.ev.i].k]=e.target.value.slice(0,1000);}else if(k==='clRes'){st.cl.txt=e.target.value;st.cl.res=null;}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
   document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);sana();snap=null;save();render();toast(sy.code?'Copia importada. Se juntará con lo sincronizado':'Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;despierta(false);if(st.s||st.tab==='entrenar'&&st.ex)wake();
     setTimeout(()=>{if(st.s&&!st.s.fin&&ac&&ac.state!=='running')toast('Toca la pantalla para recuperar el sonido',5000);},700);});
