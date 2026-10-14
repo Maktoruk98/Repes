@@ -87,6 +87,16 @@ nav:empty{display:none}
 .chips.col{flex-direction:column;margin:14px 0}.chips.col .chip{padding:13px 12px;text-align:left;white-space:normal;font-size:15px}
 .fase{margin:18px 0 -8px;text-align:center;font:700 24px/1.1 var(--tit);letter-spacing:.16em;text-transform:uppercase;color:var(--h);text-shadow:0 0 14px rgba(var(--hr),.6)}.fase.con{color:#fff}.fase.descanso{color:var(--ok);text-shadow:0 0 14px rgba(125,255,176,.6)}
 .big.t span{font-size:76px}div.big:active{transform:none}
+.aro{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(52vw,190px);aspect-ratio:1;border-radius:50%;margin:10px auto 18px;background:conic-gradient(var(--h) calc(var(--p)*1%),rgba(var(--hr),.14) 0);box-shadow:0 0 26px rgba(var(--hr),.25)}
+.aro::before{content:"";position:absolute;inset:5px;border-radius:50%;background:#06101a}.aro>*{position:relative}.aro.pasa{background:conic-gradient(var(--al) calc(var(--p)*1%),rgba(var(--hr),.14) 0)}
+.aro b{font:200 52px/1 var(--num);font-variant-numeric:tabular-nums;color:#f2feff;text-shadow:0 0 18px rgba(var(--hr),.8)}.aro small{color:var(--mut);font-size:12px;margin-top:4px}
+.mac{margin:10px 0}.mac .row{margin:0 0 4px}.mac span{font-variant-numeric:tabular-nums}
+.bar.m{height:6px;margin:0;border:1px solid rgba(var(--hr),.3);background:rgba(var(--hr),.06)}.bar.pasa i{background:var(--al);box-shadow:0 0 10px rgba(255,77,106,.6)}
+.hora{font:11px/1.4 var(--mono);color:var(--h);letter-spacing:.06em}
+.dia{align-items:center}.dia>div{flex:1;text-align:center}.dia h2{margin:2px 0}.x:disabled{opacity:.3}
+.vasos{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.vaso{height:62px;border:1px solid rgba(var(--hr),.4);border-top-color:transparent;background:rgba(var(--hr),.03)}.vaso.on{background:linear-gradient(0deg,rgba(var(--hr),.5),rgba(var(--hr),.14));border-color:var(--h);border-top-color:transparent;box-shadow:0 0 12px rgba(var(--hr),.3)}
+.graf{width:100%;height:auto;display:block;margin:6px 0}.graf text{font:10px var(--mono);fill:var(--mut)}.graf .gl{stroke:rgba(var(--hr),.14)}.graf .gp{fill:none;stroke:var(--h);stroke-width:2;filter:drop-shadow(0 0 5px rgba(var(--hr),.8))}.graf .gc{fill:var(--bg);stroke:var(--h);stroke-width:2}
 .foto{width:100%;border:1px solid rgba(var(--hr),.45);background:repeating-linear-gradient(0deg,rgba(var(--hr),.08) 0 1px,transparent 1px 4px),rgba(var(--hr),.04)}
 .foto svg{display:block;width:100%;fill:none;stroke:var(--h);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px rgba(var(--hr),.75))}.foto .pelo{fill:rgba(var(--hr),.2)}
 </style>

@@ -8,7 +8,7 @@ const st={perfil:null,ult:{},ev:null,s:null,cl:{txt:'',res:null},tab:'entrenar',
 const BYID={};EJERCICIOS.forEach(e=>BYID[e.id]=e);
 
 // Repara lo que falte en datos antiguos o importados sin tocar lo demás.
-function sana(){if(!Array.isArray(mem.rutinas))mem.rutinas=[];mem.cfg=Object.assign({descanso:90},mem.cfg);if(!(mem.cfg.descanso>0))mem.cfg.descanso=90;}
+function sana(){['rutinas','comidas','agua','pesos'].forEach(k=>{if(!Array.isArray(mem[k]))mem[k]=[];});mem.cfg=Object.assign({descanso:90},mem.cfg);if(!(mem.cfg.descanso>0))mem.cfg.descanso=90;}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.sets))mem=Object.assign(mem,d);}catch(e){}sana();snap=JSON.stringify(mem);}
 function save(){marca();try{const j=JSON.stringify(mem);localStorage.setItem(KEY,j);snap=j;}catch(e){toast('No se pudo guardar en este dispositivo');}sySoon();}
 
@@ -22,15 +22,19 @@ function marca(){
   const lista=(k,id)=>{const o=new Map((v[k]||[]).map(x=>[String(x[id]),x])),n=new Set();
     (mem[k]||[]).forEach(x=>{const c=String(x[id]);n.add(c);const a=o.get(c);if(a&&sinU(a)!==sinU(x))x.u=t;});
     o.forEach((x,c)=>{if(!n.has(c)){mem.del=mem.del||{};mem.del[k+':'+c]=t;}});};
-  lista('sets','t');lista('rutinas','id');
-  if(v.cfg&&sinU(v.cfg)!==sinU(mem.cfg))mem.cfg.u=t;
+  SY_LISTAS.forEach(l=>lista(l[0],l[1]));
+  SY_OBJ.forEach(k=>{if(mem[k]&&(v[k]?sinU(v[k])!==sinU(mem[k]):k!=='cfg'))mem[k].u=t;});
 }
+// Listas que se mezclan elemento a elemento (con su campo identificador) y ajustes que se mezclan enteros.
+const SY_LISTAS=[['sets','t'],['rutinas','id'],['comidas','t'],['agua','d'],['pesos','t']],SY_OBJ=['cfg','ncfg'];
 // Mezcla lo local (a) con lo de la nube (b). Con la misma hora gana la nube: así un dispositivo recién unido
 // no pisa los ajustes del que ya tenía datos.
 function mezcla(a,b){
   const del=Object.assign({},b.del);Object.keys(a.del||{}).forEach(k=>{del[k]=Math.max(del[k]||0,a.del[k]);});
-  const lista=(k,id)=>{const m=new Map();(a[k]||[]).concat(b[k]||[]).forEach(x=>{const c=String(x[id]);if(del[k+':'+c])return;const y=m.get(c);if(!y||(x.u||0)>=(y.u||0))m.set(c,x);});return [...m.values()].sort((x,y)=>x[id]-y[id]);};
-  const r=Object.assign({},b,a,{sets:lista('sets','t'),rutinas:lista('rutinas','id'),cfg:((a.cfg&&a.cfg.u)||0)>((b.cfg&&b.cfg.u)||0)?a.cfg:(b.cfg||a.cfg),del});
+  const lista=(k,id)=>{const m=new Map();(a[k]||[]).concat(b[k]||[]).forEach(x=>{const c=String(x[id]);if(del[k+':'+c])return;const y=m.get(c);if(!y||(x.u||0)>=(y.u||0))m.set(c,x);});return [...m.values()].sort((x,y)=>typeof x[id]==='string'?x[id].localeCompare(y[id]):x[id]-y[id]);};
+  const r=Object.assign({},b,a,{del});
+  SY_LISTAS.forEach(l=>{r[l[0]]=lista(l[0],l[1]);});
+  SY_OBJ.forEach(k=>{const o=((a[k]&&a[k].u)||0)>((b[k]&&b[k].u)||0)?a[k]:(b[k]||a[k]);if(o)r[k]=o;else delete r[k];});
   const ev=a.ev&&b.ev?(a.ev.t>b.ev.t?a.ev:b.ev):(a.ev||b.ev);if(ev)r.ev=ev;else delete r.ev;
   return JSON.parse(JSON.stringify(r));
 }
@@ -97,7 +101,7 @@ function audio(){if(ac&&ac.state==='closed')ac=null;ac=ac||new (window.AudioCont
 function despierta(gesto){if(!ac||ac.state==='running')return;if(gesto){try{ac.close();}catch(e){}ac=null;fxBus=null;}try{audio();}catch(e){}}
 function bus(){if(fxBus)return fxBus;const a=audio();fxBus=a.createGain();fxBus.connect(a.destination);const d=a.createDelay(0.5),fb=a.createGain(),w=a.createGain();d.delayTime.value=0.085;fb.gain.value=0.28;w.gain.value=0.3;fxBus.connect(d);d.connect(fb);fb.connect(d);d.connect(w);w.connect(a.destination);return fxBus;}
 function fx(n){try{bus();(FX[n]||[]).forEach(p=>{const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+p[2];o.type=p[5]||'sine';o.frequency.setValueAtTime(p[0],t);o.frequency.exponentialRampToValueAtTime(p[1],t+p[3]);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(p[4],t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+p[3]);o.connect(g);g.connect(fxBus);o.start(t);o.stop(t+p[3]+0.02);});}catch(e){}}
-function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar'||a==='evGuardar'||a==='sRep'||a==='sHecha')return;fx(b.closest('nav')||a==='ver'||a==='volver'||a==='perfil'||a==='salir'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
+function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar'||a==='evGuardar'||a==='sRep'||a==='sHecha'||a==='nPon'||a==='nMano'||a==='nPesar')return;fx(b.closest('nav')||a==='ver'||a==='volver'||a==='perfil'||a==='salir'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
 
 /* ---------- Pantalla de acceso ---------- */
 // Es un adorno, no una protección: el código está a la vista en este archivo.
@@ -287,6 +291,75 @@ function vClaude(){
     `<button class="btn" data-act="clGuarda">Guardar en Rutinas</button><button class="btn ghost" data-act="clFuera">Descartar</button><div class="mut">Sustituye las rutinas de la evaluación anterior. Las que hayas creado tú no se tocan.</div>`:'');
 }
 
+/* ---------- Alimentación (Diane Far) ---------- */
+// Comidas, agua y pesos van en listas propias de `mem` para que se sincronicen y se exporten con lo demás.
+// Los días son fechas locales (AAAA-MM-DD), no UTC, para que lo apuntado a las 00:30 cuente en el día correcto.
+const COMIDAS=[['desayuno','Desayuno'],['almuerzo','Almuerzo'],['comida','Comida'],['merienda','Merienda'],['cena','Cena']];
+const NCFG={kcal:2100,p:189,g:69,h:181,vasos:8,horas:{desayuno:'08:00',almuerzo:'11:30',comida:'13:30',merienda:'16:00',cena:'19:00'}};
+const RECETAS=[
+  {id:'pollo-arroz',n:'Pollo + arroz + brócoli',kcal:376,p:48,g:9,h:42,ing:'200 g jamoncitos · 70 g arroz · 150 g brócoli · cebolla'},
+  {id:'huevos-pan',n:'Huevos + pan + espinacas',kcal:365,p:20,g:16,h:28,ing:'3 huevos · 2 rebanadas de pan · 80 g espinacas'},
+  {id:'lentejas',n:'Lentejas + tomate + pollo',kcal:340,p:32,g:8,h:28,ing:'150 g lentejas · 100 g tomate · 100 g pollo'},
+  {id:'garbanzos',n:'Garbanzos + calabacín',kcal:242,p:10,g:7,h:32,ing:'150 g garbanzos · 200 g calabacín · cebolla'},
+  {id:'caballa',n:'Caballa + pan + tomate',kcal:350,p:28,g:12,h:26,ing:'2 latas de caballa · 2 rebanadas de pan · 80 g tomate'}];
+const pad2=n=>String(n).padStart(2,'0');
+const fechaD=(t=Date.now())=>{const d=new Date(t);return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());};
+const dDate=d=>new Date(d+'T12:00:00');
+const nc=()=>Object.assign({},NCFG,mem.ncfg,{horas:Object.assign({},NCFG.horas,mem.ncfg&&mem.ncfg.horas)});
+const nNum=v=>{const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?0:Math.max(0,n);};
+const r1=n=>Math.round(n*10)/10;
+const nDia=()=>st.nd||fechaD();
+function nCab(titulo){const d=nDia(),hoy=fechaD();
+  return `<div class="row sb dia"><button class="x" data-act="nDia" data-v="-1" aria-label="Día anterior">‹</button><div><div class="mut">${dDate(d).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</div><h2>${d===hoy?titulo:'Otro día'}</h2></div><button class="x" data-act="nDia" data-v="1" ${d>=hoy?'disabled':''} aria-label="Día siguiente">›</button></div>${d===hoy?'':'<button class="chip" data-act="nHoyDia">Volver a hoy</button>'}`;}
+function vNHoy(){
+  const c=nc(),d=nDia(),cs=mem.comidas.filter(x=>x.d===d),tot=cs.reduce((a,x)=>({kcal:a.kcal+x.kcal,p:a.p+x.p,g:a.g+x.g,h:a.h+x.h}),{kcal:0,p:0,g:0,h:0});
+  const mac=(n,a,b)=>`<div class="mac"><div class="row sb"><span>${n}</span><span>${r1(a)} <span class="mut">de ${b} g</span></span></div><div class="bar m${a>b*1.05?' pasa':''}"><i style="width:${Math.min(100,a/b*100)}%"></i></div></div>`;
+  const quedan=Math.round(c.kcal-tot.kcal),qp=Math.round(c.p-tot.p);
+  return `<div class="card">${nCab('Hoy')}
+    <div class="aro${tot.kcal>c.kcal*1.05?' pasa':''}" style="--p:${Math.min(100,tot.kcal/c.kcal*100)}"><b>${Math.round(tot.kcal)}</b><small>de ${c.kcal} kcal</small></div>
+    ${mac('Proteína',tot.p,c.p)}${mac('Grasa',tot.g,c.g)}${mac('Hidratos',tot.h,c.h)}
+    <div class="mut">${quedan>=0?`Te quedan ${quedan} kcal`:`Te has pasado ${-quedan} kcal`}${qp>0?` y ${qp} g de proteína`:' · proteína cubierta'}.</div></div>`+
+  COMIDAS.map(([k,n])=>{const l=cs.filter(x=>x.c===k),ab=st.nabre===k;
+    return `<div class="card"><div class="row sb"><div><div class="hora">${esc(c.horas[k])}</div><h3>${n}</h3></div><button class="x" data-act="nAbre" data-v="${k}" aria-label="Apuntar en ${n}">${ab?'−':'+'}</button></div>
+      ${l.length?l.map(x=>`<div class="li"><div><b>${esc(x.n)}</b><div class="mut">P ${r1(x.p)} · G ${r1(x.g)} · H ${r1(x.h)}</div></div><div class="r">${Math.round(x.kcal)} kcal</div><button class="x" data-act="delComida" data-v="${x.t}">✕</button></div>`).join(''):'<div class="mut">Sin apuntar.</div>'}
+      ${ab?`<h3>De tus recetas</h3><div class="chips">${RECETAS.map((r,i)=>`<button class="chip" data-act="nPon" data-v="${k}:${i}">${esc(r.n)}</button>`).join('')}</div>
+        <h3>A mano</h3><input class="inp" id="nmN" maxlength="60" placeholder="Qué has comido"><div class="row"><input class="inp n" id="nmK" inputmode="decimal" placeholder="kcal"><input class="inp n" id="nmP" inputmode="decimal" placeholder="P (g)"><input class="inp n" id="nmG" inputmode="decimal" placeholder="G (g)"><input class="inp n" id="nmH" inputmode="decimal" placeholder="H (g)"></div><button class="btn" data-act="nMano" data-v="${k}">Apuntar</button>`:''}</div>`;}).join('')+
+  `<div class="card">${st.nobj?`<h3>Objetivos diarios</h3>${[['kcal','Calorías (kcal)'],['p','Proteína (g)'],['g','Grasa (g)'],['h','Hidratos (g)'],['vasos','Vasos de agua']].map(([k,n])=>`<div class="row sb"><span>${n}</span><input class="inp n" inputmode="numeric" data-in="nObj" data-k="${k}" value="${c[k]}"></div>`).join('')}
+      <div class="mut">Con esos macros salen ${Math.round(c.p*4+c.g*9+c.h*4)} kcal.</div><h3>Horarios</h3>${COMIDAS.map(([k,n])=>`<div class="row sb"><span>${n}</span><input class="inp n" type="time" data-in="nHora" data-k="${k}" value="${esc(c.horas[k])}"></div>`).join('')}
+      <button class="btn ghost" data-act="nObjAbre">Cerrar</button>`:'<button class="btn ghost" data-act="nObjAbre">Objetivos y horarios</button>'}</div>`;
+}
+function vAgua(){
+  const c=nc(),e=mem.agua.find(x=>x.d===nDia()),v=e?e.v:0;
+  return `<div class="card center">${nCab('Agua')}<div class="aro" style="--p:${Math.min(100,v/c.vasos*100)}"><b>${v}</b><small>de ${c.vasos} vasos</small></div>
+    <div class="mut">${String(r1(v*0.25)).replace('.',',')} litros · vasos de 250 ml</div>
+    <div class="vasos">${Array.from({length:Math.max(c.vasos,v)},(_,i)=>`<button class="vaso ${i<v?'on':''}" data-act="nVaso" data-v="${i}" aria-label="Vaso ${i+1}"></button>`).join('')}</div>
+    <button class="btn" data-act="nAgua" data-v="1">+ 1 vaso</button><button class="btn ghost" data-act="nAgua" data-v="-1">Quitar uno</button></div>`;
+}
+function grafPeso(ps){
+  if(ps.length<2)return '<div class="mut">La gráfica aparece con dos pesos apuntados.</div>';
+  const v=ps.map(p=>p.kg),mn=Math.min(...v)-0.5,mx=Math.max(...v)+0.5,W=320,H=150,px=i=>30+i*(W-45)/(v.length-1),py=k=>12+(mx-k)/(mx-mn)*(H-36);
+  const et=i=>dDate(ps[i].d).toLocaleDateString('es-ES',{day:'numeric',month:'short'}),cada=Math.ceil(ps.length/5);
+  return `<svg class="graf" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfica de peso">${[mx,(mx+mn)/2,mn].map(k=>`<line x1="30" x2="${W-10}" y1="${py(k)}" y2="${py(k)}" class="gl"/><text x="0" y="${py(k)+3}">${r1(k)}</text>`).join('')}
+    <polyline points="${v.map((k,i)=>px(i).toFixed(1)+','+py(k).toFixed(1)).join(' ')}" class="gp"/>${v.map((k,i)=>`<circle cx="${px(i)}" cy="${py(k)}" r="3.5" class="gc"/>${i%cada===0||i===v.length-1?`<text x="${px(i)}" y="${H-4}" text-anchor="middle">${et(i)}</text>`:''}`).join('')}</svg>`;
+}
+function vPeso(){
+  const ps=mem.pesos.slice().sort((a,b)=>a.d.localeCompare(b.d)||a.t-b.t),ult=ps.slice(-20);
+  const dif=ps.length>1?r1(ps[ps.length-1].kg-ps[0].kg):0;
+  return `<div class="card"><h2>Peso</h2><div class="row"><input class="inp n" id="pK" inputmode="decimal" placeholder="kg"><input class="inp" id="pD" type="date" value="${fechaD()}" max="${fechaD()}"></div><input class="inp" id="pN" maxlength="80" placeholder="Nota (opcional)"><button class="btn" data-act="nPesar">Guardar peso</button></div>
+  <div class="card"><h3>Tendencia</h3>${grafPeso(ult)}${ps.length>1?`<div class="mut">${dif>0?'+':''}${String(dif).replace('.',',')} kg desde el ${dDate(ps[0].d).toLocaleDateString('es-ES',{day:'numeric',month:'long'})}.</div>`:''}</div>
+  <div class="card"><h3>Registros</h3>${ps.length?ps.slice().reverse().map(p=>`<div class="li"><div>${dDate(p.d).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}${p.nota?`<div class="mut">${esc(p.nota)}</div>`:''}</div><div class="r">${String(p.kg).replace('.',',')} kg</div><button class="x" data-act="delPeso" data-v="${p.t}">✕</button></div>`).join(''):'<div class="mut">Todavía ninguno.</div>'}
+    ${st.nimp?`<h3>Pegar pesos</h3><textarea class="inp" id="pImp" rows="5" placeholder="Una línea por peso: 01/10/2026 86,4"></textarea><button class="btn sm" data-act="nImpPesos">Añadir estos pesos</button>`:'<button class="btn sm ghost" data-act="nImpAbre">Pegar pesos de otra app</button>'}</div>`;
+}
+function vRecetas(){return RECETAS.map(r=>`<div class="card"><div class="row sb"><h3>${esc(r.n)}</h3><span class="tag">${r.kcal} kcal</span></div><div>P ${r.p} g · G ${r.g} g · H ${r.h} g</div><div class="mut">${esc(r.ing)}</div></div>`).join('')+'<div class="mut pad">Para apuntar una receta, toca + en la comida que toque, en Hoy.</div>';}
+const idLibre=lista=>{let t=Date.now();while(lista.some(x=>x.t===t))t++;return t;};
+function nApunta(c,o){const t=idLibre(mem.comidas);mem.comidas.push(Object.assign({t,d:nDia(),c},o));save();st.nabre=null;fx('ok');render();}
+function nAguaPon(v){const d=nDia();let e=mem.agua.find(x=>x.d===d);if(!e){e={d,v:0};mem.agua.push(e);}e.v=Math.max(0,Math.min(20,v));save();render();}
+// Lee líneas con una fecha (01/10/2026, 1-10-26 o 2026-10-01) y un peso entre 30 y 300 kg.
+function leePesos(txt){const out=[];String(txt).split(/\r?\n/).forEach(l=>{let m,d;
+  if((m=l.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)))d=[+m[1],+m[2],+m[3]];else if((m=l.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/)))d=[+m[3]<100?2000+ +m[3]:+m[3],+m[2],+m[1]];
+  if(!d||d[1]<1||d[1]>12||d[2]<1||d[2]>31)return;const resto=l.replace(m[0],' '),k=(resto.match(/\d{2,3}(?:[.,]\d+)?/)||[])[0];if(!k)return;const kg=nNum(k);if(kg<30||kg>300)return;
+  out.push({d:d[0]+'-'+pad2(d[1])+'-'+pad2(d[2]),kg:r1(kg)});});return out;}
+
 /* ---------- Entrenador ---------- */
 // Lleva la rutina del día de principio a fin: preparación, repeticiones con ritmo, series y descanso.
 const DIAS=['D','L','M','X','J','V','S'],DIAS_N=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
@@ -359,7 +432,7 @@ function vHoy(){
   ${f==='descanso'&&s.ult&&(s.ultTipo==='tempo'||s.ultTipo==='libre')?`<div class="card"><div class="row sb"><span>Repeticiones guardadas</span><span class="row"><button class="x" data-act="sReps" data-v="-1">−</button><b>${s.ult.reps}</b><button class="x" data-act="sReps" data-v="1">+</button></span></div><div class="mut">Corrígelo si no completaste la serie.</div></div>`:''}
   <div class="row c"><button class="btn sm" data-act="sPausa">${s.pausa?'Seguir':'Pausa'}</button><button class="btn sm ghost${s.conf>Date.now()?' warn':''}" data-act="sFin">${s.conf>Date.now()?'¿Seguro?':'Terminar'}</button></div>`;
 }
-const VIEWS={entrenar:vEntrenar,biblioteca:vBiblioteca,rutinas:vRutinas,historial:vHistorial,evaluacion:vEvaluacion,claude:vClaude,hoy:vHoy};
+const VIEWS={entrenar:vEntrenar,biblioteca:vBiblioteca,rutinas:vRutinas,historial:vHistorial,evaluacion:vEvaluacion,claude:vClaude,hoy:vHoy,nhoy:vNHoy,agua:vAgua,peso:vPeso,recetas:vRecetas};
 
 /* ---------- Perfiles ---------- */
 // Cada perfil abre sus propias pestañas. Sin `tabs`, el expediente aún no está disponible.
@@ -373,7 +446,7 @@ const PERFILES={
   peter:{ag:'Peter Sutherland',s:'h',tabs:[['hoy','Hoy']]},
   gym:{ag:'Mercedes Dantés',s:'n',tabs:[['biblioteca','Biblioteca'],['rutinas','Rutinas'],['historial','Historial']]},
   eval:{ag:'Pablo Lopez',s:'p',tabs:[['evaluacion','Evaluar'],['claude','Claude']]},
-  nutri:{ag:'Diane Far',s:'m'}};
+  nutri:{ag:'Diane Far',s:'m',tabs:[['nhoy','Hoy'],['agua','Agua'],['peso','Peso'],['recetas','Recetas']]}};
 function vExpedientes(){return `<div class="rejilla">${Object.keys(PERFILES).map(k=>{const p=PERFILES[k];return `<button class="card perfil ${p.tabs?'':'off'}" data-act="perfil" data-v="${k}"><div class="foto"><svg viewBox="0 0 100 120" aria-hidden="true">${SIL[p.s]}</svg></div><b>${esc(p.ag)}</b></button>`;}).join('')}</div>`;}
 function render(){
   const p=PERFILES[st.perfil];
@@ -407,6 +480,22 @@ const ACT={
     const ds=nuevas.flatMap(r=>r.dias);
     mem.rutinas=mem.rutinas.filter(r=>!r.ev).map(r=>r.dias?Object.assign(r,{dias:r.dias.filter(d=>!ds.includes(d))}):r).concat(nuevas);
     if(res.descanso)mem.cfg.descanso=res.descanso;save();st.cl={txt:'',res:null};fx('ok');render();window.scrollTo(0,0);toast('Rutinas de Claude guardadas. Están en '+PERFILES.gym.ag+' › Rutinas',4500);},
+  nDia(v){const d=dDate(nDia());d.setDate(d.getDate()+Number(v));const s=fechaD(d.getTime());if(s>fechaD())return;st.nd=s===fechaD()?null:s;st.nabre=null;render();},
+  nHoyDia(){st.nd=null;st.nabre=null;render();},
+  nAbre(v){st.nabre=st.nabre===v?null:v;render();},
+  nPon(v){const p=v.split(':'),r=RECETAS[Number(p[1])];if(r)nApunta(p[0],{n:r.n,kcal:r.kcal,p:r.p,g:r.g,h:r.h,rec:r.id});},
+  nMano(v){const n=($('#nmN').value||'').trim().slice(0,60),k=nNum($('#nmK').value);if(!n||!k){toast('Pon al menos qué has comido y las kcal');return;}
+    nApunta(v,{n,kcal:r1(k),p:r1(nNum($('#nmP').value)),g:r1(nNum($('#nmG').value)),h:r1(nNum($('#nmH').value))});},
+  delComida(v,b){if(!seguro(b))return;mem.comidas=mem.comidas.filter(x=>String(x.t)!==String(v));save();render();},
+  nObjAbre(){st.nobj=!st.nobj;render();},
+  nVaso(v){const e=mem.agua.find(x=>x.d===nDia()),n=Number(v)+1;nAguaPon(e&&e.v===n?n-1:n);},
+  nAgua(v){const e=mem.agua.find(x=>x.d===nDia());nAguaPon((e?e.v:0)+Number(v));},
+  nPesar(){const k=nNum($('#pK').value),d=$('#pD').value||fechaD();if(k<30||k>300){toast('Escribe el peso en kg');return;}if(d>fechaD()){toast('Esa fecha aún no ha llegado');return;}
+    mem.pesos.push({t:idLibre(mem.pesos),d,kg:r1(k),nota:($('#pN').value||'').trim().slice(0,80)});save();fx('ok');render();},
+  delPeso(v,b){if(!seguro(b))return;mem.pesos=mem.pesos.filter(x=>String(x.t)!==String(v));save();render();},
+  nImpAbre(){st.nimp=1;render();},
+  nImpPesos(){const ps=leePesos(($('#pImp')||{}).value);let n=0;ps.forEach(p=>{if(!mem.pesos.some(x=>x.d===p.d&&x.kg===p.kg)){mem.pesos.push({t:idLibre(mem.pesos),d:p.d,kg:p.kg,nota:''});n++;}});
+    if(!ps.length){toast('No encuentro fechas con pesos en lo que has pegado');return;}save();st.nimp=0;render();toast(n+(n===1?' peso añadido':' pesos añadidos')+(ps.length>n?' ('+(ps.length-n)+' ya estaban)':''));},
   syNuevo(){sy.code=nuevoCodigo();sy.err='';sy.ult=0;sySave();render();sincroniza().then(ok=>{if(ok)toast('Sincronización activada');});},
   syUnir(){const c=(($('#syCod')||{}).value||'').toUpperCase().replace(/0/g,'O').replace(/1/g,'I').replace(/8/g,'B').replace(/[^A-Z2-7]/g,'');
     if(c.length!==16){sy.err='El código tiene 16 caracteres';pintaSync();return;}
@@ -459,7 +548,9 @@ const ACT={
 function init(){
   load();
   document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
-  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='evNota'&&st.ev){st.ev.r.notas[EV_P[st.ev.i].k]=e.target.value.slice(0,1000);}else if(k==='clRes'){st.cl.txt=e.target.value;st.cl.res=null;}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
+  document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='evNota'&&st.ev){st.ev.r.notas[EV_P[st.ev.i].k]=e.target.value.slice(0,1000);}else if(k==='clRes'){st.cl.txt=e.target.value;st.cl.res=null;}
+    else if(k==='nObj'){const n=Math.round(nNum(e.target.value));if(n>0){mem.ncfg=nc();mem.ncfg[e.target.dataset.k]=n;save();}}
+    else if(k==='nHora'){if(/^\d{2}:\d{2}$/.test(e.target.value)){mem.ncfg=nc();mem.ncfg.horas[e.target.dataset.k]=e.target.value;save();}}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
   document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);sana();snap=null;save();render();toast(sy.code?'Copia importada. Se juntará con lo sincronizado':'Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;despierta(false);if(st.s||st.tab==='entrenar'&&st.ex)wake();
     setTimeout(()=>{if(st.s&&!st.s.fin&&ac&&ac.state!=='running')toast('Toca la pantalla para recuperar el sonido',5000);},700);});
