@@ -9,8 +9,71 @@ const BYID={};EJERCICIOS.forEach(e=>BYID[e.id]=e);
 
 // Repara lo que falte en datos antiguos o importados sin tocar lo demás.
 function sana(){if(!Array.isArray(mem.rutinas))mem.rutinas=[];mem.cfg=Object.assign({descanso:90},mem.cfg);if(!(mem.cfg.descanso>0))mem.cfg.descanso=90;}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.sets))mem=Object.assign(mem,d);}catch(e){}sana();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){toast('No se pudo guardar en este dispositivo');}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.sets))mem=Object.assign(mem,d);}catch(e){}sana();snap=JSON.stringify(mem);}
+function save(){marca();try{const j=JSON.stringify(mem);localStorage.setItem(KEY,j);snap=j;}catch(e){toast('No se pudo guardar en este dispositivo');}sySoon();}
+
+/* ---------- Sincronización entre dispositivos ---------- */
+// Al guardar se compara con lo último guardado: lo cambiado lleva la hora en `u` y lo borrado deja una marca
+// en `mem.del`, para que la mezcla con el otro dispositivo sepa qué es más nuevo y qué no debe volver.
+let snap=null;
+const sinU=x=>JSON.stringify(Object.assign({},x,{u:0}));
+function marca(){
+  if(!snap)return;let v;try{v=JSON.parse(snap);}catch(e){return;}const t=Date.now();
+  const lista=(k,id)=>{const o=new Map((v[k]||[]).map(x=>[String(x[id]),x])),n=new Set();
+    (mem[k]||[]).forEach(x=>{const c=String(x[id]);n.add(c);const a=o.get(c);if(a&&sinU(a)!==sinU(x))x.u=t;});
+    o.forEach((x,c)=>{if(!n.has(c)){mem.del=mem.del||{};mem.del[k+':'+c]=t;}});};
+  lista('sets','t');lista('rutinas','id');
+  if(v.cfg&&sinU(v.cfg)!==sinU(mem.cfg))mem.cfg.u=t;
+}
+// Mezcla lo local (a) con lo de la nube (b). Con la misma hora gana la nube: así un dispositivo recién unido
+// no pisa los ajustes del que ya tenía datos.
+function mezcla(a,b){
+  const del=Object.assign({},b.del);Object.keys(a.del||{}).forEach(k=>{del[k]=Math.max(del[k]||0,a.del[k]);});
+  const lista=(k,id)=>{const m=new Map();(a[k]||[]).concat(b[k]||[]).forEach(x=>{const c=String(x[id]);if(del[k+':'+c])return;const y=m.get(c);if(!y||(x.u||0)>=(y.u||0))m.set(c,x);});return [...m.values()].sort((x,y)=>x[id]-y[id]);};
+  const r=Object.assign({},b,a,{sets:lista('sets','t'),rutinas:lista('rutinas','id'),cfg:((a.cfg&&a.cfg.u)||0)>((b.cfg&&b.cfg.u)||0)?a.cfg:(b.cfg||a.cfg),del});
+  const ev=a.ev&&b.ev?(a.ev.t>b.ev.t?a.ev:b.ev):(a.ev||b.ev);if(ev)r.ev=ev;else delete r.ev;
+  return JSON.parse(JSON.stringify(r));
+}
+const SYNC_URL=typeof location!=='undefined'&&/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'http://127.0.0.1:8787':'https://repes.maktoruk98.workers.dev';
+const SK='repes.sync';
+let sy={code:'',ult:0,err:'',ocupado:false,otra:false,timer:0};
+function syLoad(){try{const d=JSON.parse(localStorage.getItem(SK));if(d&&d.code)sy.code=d.code,sy.ult=d.ult||0;}catch(e){}}
+function sySave(){try{if(sy.code)localStorage.setItem(SK,JSON.stringify({code:sy.code,ult:sy.ult}));else localStorage.removeItem(SK);}catch(e){}}
+function sySoon(){if(!sy.code)return;clearTimeout(sy.timer);sy.timer=setTimeout(sincroniza,2500);}
+async function sincroniza(unir){
+  if(!sy.code)return false;if(sy.ocupado){sy.otra=true;return false;}
+  if(typeof navigator.onLine==='boolean'&&!navigator.onLine){sy.err='Sin conexión: se sincronizará al volver';pintaSync();return false;}
+  sy.ocupado=true;pintaSync();let ok=false;
+  try{
+    for(let intento=0;intento<4&&!ok;intento++){
+      const g=await fetch(SYNC_URL+'/doc',{headers:{'x-repes-code':sy.code},cache:'no-store'});
+      if(!g.ok)throw new Error('servidor '+g.status);
+      const rem=await g.json();
+      if(unir&&!rem.data){sy.code='';throw new Error('Ese código no existe. Revísalo en el otro dispositivo');}
+      const m=rem.data?mezcla(mem,rem.data):JSON.parse(JSON.stringify(mem)),mj=JSON.stringify(m);
+      if(mj!==JSON.stringify(mem)){mem=m;sana();try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){}snap=JSON.stringify(mem);if(!st.s)render();}
+      if(rem.data&&mj===JSON.stringify(rem.data)){ok=true;break;}
+      const p=await fetch(SYNC_URL+'/doc',{method:'PUT',headers:{'content-type':'application/json','x-repes-code':sy.code},body:JSON.stringify({ver:rem.ver,data:mem})});
+      if(p.status===409)continue;
+      if(!p.ok)throw new Error('servidor '+p.status);
+      ok=true;
+    }
+    if(!ok)throw new Error('no se pudo, se reintentará');
+    sy.ult=Date.now();sy.err='';
+  }catch(e){sy.err=e.message==='Failed to fetch'?'Sin conexión con el servidor':e.message;}
+  finally{sy.ocupado=false;sySave();pintaSync();if(sy.otra){sy.otra=false;sySoon();}}
+  return ok;
+}
+function nuevoCodigo(){const A='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',b=new Uint8Array(16);crypto.getRandomValues(b);return [...b].map(x=>A[x%32]).join('');}
+const verCodigo=c=>c.replace(/(.{4})(?=.)/g,'$1-');
+function vSync(){
+  if(!sy.code)return `<h3>Sincronización</h3><div class="mut">Para ver los mismos datos en el iPhone y en el ordenador. Actívala en un dispositivo y une el otro con el código que te dé.</div><button class="btn sm" data-act="syNuevo">Activar en este dispositivo</button>
+    <input class="inp" id="syCod" autocomplete="off" autocapitalize="characters" placeholder="Código del otro dispositivo"><button class="btn sm ghost" data-act="syUnir">Unir con este código</button><div class="mut" id="syEst">${esc(sy.err)}</div>`;
+  return `<h3>Sincronización</h3><div class="sel">${verCodigo(sy.code)}</div><div class="mut">Usa este código para unir tu otro dispositivo. Guárdalo: con él se recuperan tus datos.</div><div class="mut" id="syEst">${esc(syEstado())}</div>
+    <div class="row"><button class="btn sm" data-act="syYa">Sincronizar ahora</button><button class="btn sm ghost" data-act="syCopia">Copiar código</button><button class="btn sm ghost" data-act="delSync">Desactivar</button></div>`;
+}
+function syEstado(){return sy.ocupado?'Sincronizando…':sy.err?sy.err:sy.ult?'Sincronizado: '+new Date(sy.ult).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Pendiente';}
+function pintaSync(){const e=typeof document!=='undefined'&&document.getElementById?document.getElementById('syEst'):null;if(e)e.textContent=sy.code?syEstado():sy.err;}
 const dia=t=>new Date(t).toDateString();
 const fechaLarga=t=>new Date(t).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});
 const mmss=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
@@ -128,7 +191,7 @@ function vRutinas(){
 function vHistorial(){
   const days={};mem.sets.forEach(s=>{(days[dia(s.t)]=days[dia(s.t)]||[]).push(s);});
   const keys=Object.keys(days).sort((a,b)=>new Date(b)-new Date(a));
-  return `<div class="card"><h2>Historial</h2><div class="mut">${keys.length} ${keys.length===1?'día':'días'} · ${mem.sets.length} ${mem.sets.length===1?'serie':'series'}</div><div class="row"><button class="btn sm" data-act="exportar">Exportar copia</button><button class="btn sm ghost" data-act="importar">Importar copia</button><input type="file" id="imp" accept="application/json,.json" hidden></div><div class="mut">Los datos solo viven en este iPhone. Exporta una copia de vez en cuando.</div><div class="mut" id="ver"></div><h3>Nombre de agente</h3><input class="inp" data-in="agente" maxlength="24" autocomplete="off" placeholder="${esc(AGENTE)}" value="${esc(mem.cfg.agente||'')}"><div class="mut">Es el nombre del saludo al entrar. Se guarda solo en este iPhone.</div></div>`+
+  return `<div class="card"><h2>Historial</h2><div class="mut">${keys.length} ${keys.length===1?'día':'días'} · ${mem.sets.length} ${mem.sets.length===1?'serie':'series'}</div><div class="row"><button class="btn sm" data-act="exportar">Exportar copia</button><button class="btn sm ghost" data-act="importar">Importar copia</button><input type="file" id="imp" accept="application/json,.json" hidden></div><div class="mut">${sy.code?'Los datos se sincronizan con tus otros dispositivos.':'Los datos solo viven en este dispositivo.'} Exporta una copia de vez en cuando.</div><div class="mut" id="ver"></div><h3>Nombre de agente</h3><input class="inp" data-in="agente" maxlength="24" autocomplete="off" placeholder="${esc(AGENTE)}" value="${esc(mem.cfg.agente||'')}"><div class="mut">Es el nombre del saludo al entrar. Se guarda con el resto de tus datos.</div>${vSync()}</div>`+
   (keys.length?keys.map(k=>{const ss=days[k];const vol=ss.reduce((a,s)=>a+s.kg*s.reps,0);return `<div class="card"><h3>${fechaLarga(ss[0].t)}</h3><div class="mut">${ss.length} series · ${Math.round(vol)} kg de volumen</div>${ss.map(s=>`<div class="li"><div><b>${esc(s.n)}</b><div class="mut">${esc(s.v)}</div></div><div class="r">${s.kg} kg × ${s.reps}</div><button class="x" data-act="delSet" data-v="${s.t}">✕</button></div>`).join('')}</div>`;}).join(''):'<div class="card mut">Aún no hay series guardadas.</div>');
 }
 function verVersion(){if(typeof caches==='undefined')return;Promise.all(['./index.html','./app.js','./exercises.js'].map(u=>caches.match(u))).then(rs=>{const t=Math.max(0,...rs.map(r=>r?Date.parse(r.headers.get('last-modified')||'')||0:0));const el=$('#ver');if(t&&el)el.textContent='Versión publicada el '+new Date(t).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}).catch(()=>{});}
@@ -258,7 +321,7 @@ function render(){
 
 /* ---------- Acciones ---------- */
 const rut=id=>mem.rutinas.find(r=>String(r.id)===String(id));
-function seguro(b){if(b.dataset.ok)return true;const t=b.textContent;b.dataset.ok='1';b.textContent='¿Borrar?';b.classList.add('warn');setTimeout(()=>{delete b.dataset.ok;b.textContent=t;b.classList.remove('warn');},2500);return false;}
+function seguro(b,txt){if(b.dataset.ok)return true;const t=b.textContent;b.dataset.ok='1';b.textContent=txt||'¿Borrar?';b.classList.add('warn');setTimeout(()=>{delete b.dataset.ok;b.textContent=t;b.classList.remove('warn');},2500);return false;}
 const ACT={
   perfil(v){const p=PERFILES[v];if(!p.tabs){toast('Expediente en preparación');return;}st.perfil=v;st.tab=st.ult[v]||p.tabs[0][0];render();window.scrollTo(0,0);},
   sIni(v){const r=rut(v||($('#sOtra')||{}).value);if(!r||!r.items.length)return;st.s={rid:r.id,n:r.n,items:r.items,i:0,ini:Date.now(),hechas:0,pausa:0,conf:0,fin:0};sEjercicio();wake();sFase('prep',T_PREP);window.scrollTo(0,0);},
@@ -269,6 +332,13 @@ const ACT={
   sReps(v){const s=st.s;if(!s.ult)return;s.ult.reps=Math.max(1,s.ult.reps+Number(v));save();render();},
   sFin(){const s=st.s;if(s.conf>Date.now()){st.s=null;render();toast('Entrenamiento terminado. Las series hechas están guardadas',3500);}else{s.conf=Date.now()+3000;render();}},
   sCerrar(){st.s=null;render();window.scrollTo(0,0);},
+  syNuevo(){sy.code=nuevoCodigo();sy.err='';sy.ult=0;sySave();render();sincroniza().then(ok=>{if(ok)toast('Sincronización activada');});},
+  syUnir(){const c=(($('#syCod')||{}).value||'').toUpperCase().replace(/0/g,'O').replace(/1/g,'I').replace(/8/g,'B').replace(/[^A-Z2-7]/g,'');
+    if(c.length!==16){sy.err='El código tiene 16 caracteres';pintaSync();return;}
+    sy.code=c;sy.err='';sySave();render();sincroniza(true).then(ok=>{render();if(ok)toast('Dispositivo unido');});},
+  syYa(){sincroniza();},
+  syCopia(){try{navigator.clipboard.writeText(verCodigo(sy.code)).then(()=>toast('Código copiado'),()=>toast('No se pudo copiar'));}catch(e){toast('No se pudo copiar');}},
+  delSync(v,b){if(!seguro(b,'¿Seguro?'))return;sy.code='';sy.err='';sy.ult=0;sySave();render();toast('Sincronización desactivada en este dispositivo');},
   rutDia(v){const p=v.split(':'),r=rut(p[0]),d=Number(p[1]);if(!r)return;if((r.dias||[]).includes(d))r.dias=r.dias.filter(x=>x!==d);else{mem.rutinas.forEach(x=>{if(x.dias)x.dias=x.dias.filter(y=>y!==d);});r.dias=(r.dias||[]).concat(d);}save();render();},
   salir(){if(st.s&&!st.s.fin){toast('Termina o completa el entrenamiento antes de salir');return;}if(st.perfil)st.ult[st.perfil]=st.tab;st.perfil=null;st.det=null;render();window.scrollTo(0,0);},
   evIni(){st.ev={i:0,r:{evitar:[],fortalecer:[],prioridad:[]},res:null};render();window.scrollTo(0,0);},
@@ -313,10 +383,13 @@ function init(){
   load();
   document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=ACT[b.dataset.act];if(f){fxDe(b);f(b.dataset.v,b);}});
   document.addEventListener('input',e=>{const k=e.target.dataset?e.target.dataset.in:null;if(!k)return;if(k==='q'){st.q=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='equipo'){st.equipo=e.target.value;$('#lista').innerHTML=listaHTML();}else if(k==='agente'){mem.cfg.agente=e.target.value.slice(0,24);save();}else if(k==='kgv'){const n=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(n))st.kg=Math.max(0,n);}});
-  document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);sana();save();render();toast('Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
+  document.addEventListener('change',e=>{if(e.target.id!=='imp'||!e.target.files[0])return;const fr=new FileReader();fr.onload=()=>{try{const d=JSON.parse(fr.result);if(!Array.isArray(d.sets))throw 0;mem=Object.assign({sets:[],rutinas:[],cfg:{descanso:90}},d);sana();snap=null;save();render();toast(sy.code?'Copia importada. Se juntará con lo sincronizado':'Copia importada');}catch(x){toast('Ese archivo no es una copia válida');}};fr.readAsText(e.target.files[0]);});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;despierta(false);if(st.s||st.tab==='entrenar'&&st.ex)wake();
     setTimeout(()=>{if(st.s&&!st.s.fin&&ac&&ac.state!=='running')toast('Toca la pantalla para recuperar el sonido',5000);},700);});
   document.addEventListener('pointerdown',()=>despierta(true),true);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')sincroniza();});
+  window.addEventListener('online',()=>sincroniza());
+  syLoad();if(sy.code)sincroniza();
   if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.tipo==='actualizada')toast('Actualización descargada: cierra y abre la app para verla',6000);});}
   render();
   try{if(navigator.audioSession)navigator.audioSession.type='ambient';}catch(e){}
