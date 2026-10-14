@@ -78,20 +78,27 @@ nav button{flex:1;padding:14px 0 12px;font-size:clamp(9.5px,2.9vw,11px);letter-s
 @keyframes niega{25%{transform:translateX(-8px)}50%{transform:translateX(8px)}75%{transform:translateX(-5px)}}
 @media (prefers-reduced-motion:reduce){#acceso.verif .ac-aro::before,#acceso.verif .ac-aro::after,#acceso.no .ac-cod{animation:none}}
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translateX(-50%);background:rgba(5,9,15,.85);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(var(--hr),.5);color:var(--tx);padding:10px 16px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}#toast.on{opacity:1}
+.exp .back{font:inherit;letter-spacing:inherit;text-transform:uppercase;padding:8px 12px 8px 0;margin:-8px 0}
+nav:empty{display:none}
+.rejilla{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.perfil{display:flex;flex-direction:column;align-items:center;gap:12px;margin:0;padding:14px 10px;text-align:center}.perfil.off{opacity:.45}
+.perfil b{font:700 15px/1.2 var(--tit);letter-spacing:.08em;text-transform:uppercase;color:#f2feff;text-shadow:0 0 12px rgba(var(--hr),.55)}
+.bar{height:4px;margin:8px 0 14px;background:rgba(var(--hr),.12)}.bar i{display:block;height:100%;background:var(--h);box-shadow:0 0 10px rgba(var(--hr),.6)}
+.chips.col{flex-direction:column;margin:14px 0}.chips.col .chip{padding:13px 12px;text-align:left;white-space:normal;font-size:15px}
+.fase{margin:18px 0 -8px;text-align:center;font:700 24px/1.1 var(--tit);letter-spacing:.16em;text-transform:uppercase;color:var(--h);text-shadow:0 0 14px rgba(var(--hr),.6)}.fase.con{color:#fff}.fase.descanso{color:var(--ok);text-shadow:0 0 14px rgba(125,255,176,.6)}
+.big.t span{font-size:76px}div.big:active{transform:none}
+.foto{width:100%;border:1px solid rgba(var(--hr),.45);background:repeating-linear-gradient(0deg,rgba(var(--hr),.08) 0 1px,transparent 1px 4px),rgba(var(--hr),.04)}
+.foto svg{display:block;width:100%;fill:none;stroke:var(--h);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px rgba(var(--hr),.75))}.foto .pelo{fill:rgba(var(--hr),.2)}
 </style>
 </head>
 <body>
 <div class="clasif">Alto secreto // Acceso restringido</div>
-<div class="exp"><span>Expediente RP-110</span><span>Agente <span class="tach">xxxxxxxx</span></span></div>
+<div class="exp" id="exp"></div>
 <main id="view"></main>
 <div id="toast" role="status"></div>
-<nav>
-  <button data-act="tab" data-v="entrenar">Entrenar</button>
-  <button data-act="tab" data-v="biblioteca">Biblioteca</button>
-  <button data-act="tab" data-v="rutinas">Rutinas</button>
-  <button data-act="tab" data-v="historial">Historial</button>
-</nav>
+<nav id="nav"></nav>
 <script src="exercises.js"></script>
+<script src="evaluacion.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
