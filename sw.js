@@ -2,7 +2,7 @@
 // No hay número de versión que tocar. Cada vez que la app se abre con conexión, descarga en segundo plano
 // lo que haya publicado y lo deja listo para la siguiente apertura. Si falla algún archivo, no cambia nada.
 const C='repes-app';
-const A=['./','./index.html','./app.js','./exercises.js','./evaluacion.js','./manifest.webmanifest','./icon-180.png','./icon-512.png'];
+const A=['./','./index.html','./app.js','./exercises.js','./evaluacion.js','./mapa.js','./exo2-latin.woff2','./manifest.webmanifest','./icon-180.png','./icon-512.png'];
 const BASE=new URL('./',self.location).pathname;
 const igual=(a,b)=>{if(a.byteLength!==b.byteLength)return false;const x=new Uint8Array(a),y=new Uint8Array(b);for(let i=0;i<x.length;i++)if(x[i]!==y[i])return false;return true;};
 let enCurso=null;
