@@ -100,14 +100,15 @@ function despierta(gesto){if(!ac||ac.state==='running')return;if(gesto){try{ac.c
 let fxBus=null,snd=null;
 function bus(){const a=audio();if(fxBus&&snd&&snd.ac===a)return fxBus;
   const comp=a.createDynamicsCompressor();comp.threshold.value=-10;comp.ratio.value=3;comp.connect(a.destination);fxBus=a.createGain();fxBus.gain.value=.9;fxBus.connect(comp);
-  const n=Math.floor(a.sampleRate*.4),b=a.createBuffer(2,n,a.sampleRate);for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,6);}
-  const sala=a.createConvolver();sala.buffer=b;const sg=a.createGain();sg.gain.value=.18;sala.connect(sg);sg.connect(comp);
+  // Sala amplia (2,6 s), como la de ApuntesLarry: el golpe es seco, la cola es larga.
+  const n=Math.floor(a.sampleRate*2.6),b=a.createBuffer(2,n,a.sampleRate);for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.6);}
+  const pre=a.createDelay(.1);pre.delayTime.value=.025;const sala=a.createConvolver();sala.buffer=b;const sg=a.createGain();sg.gain.value=.55;pre.connect(sala);sala.connect(sg);sg.connect(comp);
   const rb=a.createBuffer(1,a.sampleRate,a.sampleRate),rd=rb.getChannelData(0);for(let j=0;j<rd.length;j++)rd[j]=Math.random()*2-1;
-  snd={ac:a,sala,ruido:rb};return fxBus;}
+  snd={ac:a,sala:pre,ruido:rb};return fxBus;}
 function sSale(n,envio){n.connect(fxBus);const s=ac.createGain();s.gain.value=envio==null?1:envio;n.connect(s);s.connect(snd.sala);}
 function sClic(t,f,q,dur,v){const src=ac.createBufferSource(),bp=ac.createBiquadFilter(),g=ac.createGain();src.buffer=snd.ruido;bp.type='bandpass';bp.frequency.value=f;bp.Q.value=q;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.0006);g.gain.exponentialRampToValueAtTime(.0001,t+dur);src.connect(bp);bp.connect(g);sSale(g);src.start(t,Math.random()*.5);src.stop(t+dur+.01);}
-function sGolpe(t,f,dur,v){const o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f*.5,t+dur);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.002);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);sSale(g,.6);o.start(t);o.stop(t+dur+.01);}
-function sTono(t,f,dur,v,tipo,corte){const o=ac.createOscillator(),g=ac.createGain(),lp=ac.createBiquadFilter();o.type=tipo||'sine';o.frequency.value=f;lp.type='lowpass';lp.frequency.value=corte||8000;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.003);g.gain.setValueAtTime(v,t+dur-.006);g.gain.linearRampToValueAtTime(0,t+dur);o.connect(lp);lp.connect(g);sSale(g,.5);o.start(t);o.stop(t+dur+.01);}
+function sGolpe(t,f,dur,v){const o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f*.5,t+dur);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.002);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);sSale(g,.9);o.start(t);o.stop(t+dur+.01);}
+function sTono(t,f,dur,v,tipo,corte){const o=ac.createOscillator(),g=ac.createGain(),lp=ac.createBiquadFilter();o.type=tipo||'sine';o.frequency.value=f;lp.type='lowpass';lp.frequency.value=corte||8000;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.003);g.gain.setValueAtTime(v,t+dur-.006);g.gain.linearRampToValueAtTime(0,t+dur);o.connect(lp);lp.connect(g);sSale(g,.85);o.start(t);o.stop(t+dur+.01);}
 const FX={
   tap:t=>{sClic(t,3000,6,.012,.5);sClic(t,800,3,.006,.25);},
   sel:t=>{sClic(t,2500,8,.008,.4);sClic(t+.035,2200,8,.008,.3);},
