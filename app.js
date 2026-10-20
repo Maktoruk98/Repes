@@ -109,23 +109,28 @@ function sSale(n,envio){n.connect(fxBus);const s=ac.createGain();s.gain.value=en
 function sClic(t,f,q,dur,v){const src=ac.createBufferSource(),bp=ac.createBiquadFilter(),g=ac.createGain();src.buffer=snd.ruido;bp.type='bandpass';bp.frequency.value=f;bp.Q.value=q;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.0006);g.gain.exponentialRampToValueAtTime(.0001,t+dur);src.connect(bp);bp.connect(g);sSale(g);src.start(t,Math.random()*.5);src.stop(t+dur+.01);}
 function sGolpe(t,f,dur,v){const o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f*.5,t+dur);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.002);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);sSale(g,.9);o.start(t);o.stop(t+dur+.01);}
 function sTono(t,f,dur,v,tipo,corte){const o=ac.createOscillator(),g=ac.createGain(),lp=ac.createBiquadFilter();o.type=tipo||'sine';o.frequency.value=f;lp.type='lowpass';lp.frequency.value=corte||8000;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.003);g.gain.setValueAtTime(v,t+dur-.006);g.gain.linearRampToValueAtTime(0,t+dur);o.connect(lp);lp.connect(g);sSale(g,.85);o.start(t);o.stop(t+dur+.01);}
+// «Gota digital» (elegida por Larry el 18/10): una nota que cae un pelo al empezar, con la cola en la sala.
+// Toda la familia es esa misma gota en mi y si, a distintas alturas: una nota por sonido, tres en la apertura.
+function sGota(t,f,dur,v,caida){const o=ac.createOscillator(),g=ac.createGain(),k=caida||1.06;o.frequency.setValueAtTime(f*k,t);o.frequency.exponentialRampToValueAtTime(f,t+Math.min(.03,dur*.4));
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.002);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);sSale(g,.9);o.start(t);o.stop(t+dur+.02);}
+const E4=329.63,B4=493.88,E5=659.25,B5=987.77,E6=1318.51;
 const FX={
-  tap:t=>{sClic(t,3000,6,.012,.5);sClic(t,800,3,.006,.25);},
-  sel:t=>{sClic(t,2500,8,.008,.4);sClic(t+.035,2200,8,.008,.3);},
-  nav:t=>{sClic(t,1800,4,.01,.45);sGolpe(t,150,.05,.25);},
-  baja:t=>{sGolpe(t,95,.12,.45);sClic(t,600,2,.012,.25);},
-  cuenta:t=>{sClic(t,4200,12,.01,.35);},
-  exc:t=>{sGolpe(t,120,.16,.25);},
-  con:t=>{sClic(t,2600,5,.01,.55);sGolpe(t,180,.07,.4);},
-  rep:t=>{sClic(t,3500,10,.006,.45);},
-  fin:t=>{sTono(t,1630,.012,.2);sClic(t,1630,30,.35,.3);sClic(t,2570,40,.25,.18);},
-  ok:t=>{sClic(t,2800,6,.008,.4);sClic(t+.04,2600,6,.008,.35);sClic(t+.08,2900,6,.008,.35);sGolpe(t+.08,140,.06,.3);},
-  meta:t=>{sGolpe(t,75,.2,.65);sClic(t,500,1,.04,.35);},
-  verif:t=>{for(let i=0;i<7;i++)sClic(t+i*.032+Math.random()*.01,1600+Math.random()*1600,6,.007,.32);},
-  concedido:t=>{sClic(t,2200,6,.01,.45);sClic(t+.13,2000,6,.01,.45);sGolpe(t+.3,62,.35,.75);sClic(t+.3,400,1.5,.05,.35);},
-  denegado:t=>{sTono(t,118,.36,.3,'square',700);},
-  letra:t=>{sClic(t,3200,6,.005,.22);},
-  agente:t=>{sClic(t,1800+Math.random()*900,5,.004,.2);}
+  tap:t=>sGota(t,E6,.09,.13),
+  sel:t=>sGota(t,B5,.1,.12),
+  nav:t=>sGota(t,E5,.12,.13,1.08),
+  baja:t=>sGota(t,B4,.14,.13,1.15),
+  cuenta:t=>sGota(t,E6,.06,.09),
+  exc:t=>sGota(t,E4,.25,.11,1.03),
+  con:t=>sGota(t,E5,.12,.16),
+  rep:t=>sGota(t,B5,.08,.12),
+  fin:t=>sGota(t,E6,.3,.12),
+  ok:t=>sGota(t,B5,.22,.13),
+  meta:t=>{sGota(t,E6,.45,.12);sGota(t,E5,.45,.08);},
+  verif:t=>sGota(t,E5,.16,.11,1.2),
+  concedido:t=>{sGota(t,E5,.14,.12);sGota(t+.12,B5,.14,.12);sGota(t+.24,E6,.3,.13);},
+  denegado:t=>sGota(t,B4*.9,.3,.15,1.12),
+  letra:t=>sGota(t,E6,.03,.05),
+  agente:t=>sGota(t,B5,.035,.06)
 };
 function fx(n){try{bus();const f=FX[n];if(f)f(ac.currentTime+.005);}catch(e){}}
 function fxDe(b){const a=b.dataset.act;if(a==='rep'||a==='guardar'||a==='evGuardar'||a==='sRep'||a==='sHecha'||a==='nPon'||a==='nMano'||a==='nPesar')return;fx(b.closest('nav')||a==='ver'||a==='volver'||a==='perfil'||a==='salir'?'nav':b.classList.contains('chip')||b.closest('.seg')?'sel':a.indexOf('del')===0?'baja':'tap');}
