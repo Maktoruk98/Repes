@@ -546,7 +546,7 @@ const PERFILES={
 function vExpedientes(){return `<div class="rejilla">${Object.keys(PERFILES).map(k=>{const p=PERFILES[k];return `<button class="card perfil ${p.tabs?'':'off'}" data-act="perfil" data-v="${k}"><div class="foto"><svg viewBox="0 0 100 120" aria-hidden="true">${SIL[p.s]}</svg></div><b>${esc(p.ag)}</b></button>`;}).join('')}</div>`;}
 function render(){
   const p=PERFILES[st.perfil];
-  $('#exp').innerHTML=p?`<button class="back" data-act="salir">‹ Expedientes</button><span>${esc(p.ag)}</span>`:'<span>Expediente RP-110</span><span>Agente <span class="tach">xxxxxxxx</span></span>';
+  $('#exp').innerHTML=p?`<button class="back" data-act="salir">‹ Expedientes</button><span>${esc(p.ag)}</span>`:'<span>Expedientes</span><span>Agente '+esc(agente())+'</span>';
   $('#nav').innerHTML=p&&p.tabs.length>1?p.tabs.map(t=>`<button data-act="tab" data-v="${t[0]}" class="${st.tab===t[0]?'on':''}">${t[1]}</button>`).join(''):'';
   $('#view').innerHTML=p?VIEWS[st.tab]():vExpedientes();
   if(p&&st.tab==='historial')verVersion();
